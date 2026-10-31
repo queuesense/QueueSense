@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: queuesense
+    runtime: docker
+    dockerfilePath: ./Dockerfile.render
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_OWNER_EMAIL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: APP_AUTH_SECRET
+        generateValue: true

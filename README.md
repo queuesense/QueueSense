@@ -11,3 +11,9 @@
 The first Google account matching `APP_OWNER_EMAIL` becomes owner/admin. Other first-time Google sign-ins become viewers. The owner can promote them from Settings after their first sign-in; QueueSense never collects or stores users' Google passwords.
 
 For a separate frontend/backend deployment, set `VITE_API_BASE_URL` at frontend build time and set `CORS_ORIGINS` on the backend to the exact frontend origin(s), comma-separated.
+
+## Deploy on Render
+
+This repository includes `render.yaml` and `Dockerfile.render` for a single public service. In Render, select **New → Blueprint**, connect `queuesense/QueueSense`, and provide `APP_OWNER_EMAIL` and `GOOGLE_CLIENT_ID`. Render generates `APP_AUTH_SECRET`.
+
+After Render gives you its HTTPS URL, add that exact URL to the Google OAuth Client's **Authorized JavaScript origins**. The production build reads the Google Client ID from the backend at runtime, so no client ID is committed to Git.

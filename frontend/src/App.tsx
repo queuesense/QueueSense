@@ -102,7 +102,10 @@ type PlaceFolder = {
 type SectionView = 'explorer' | 'wayfinding' | 'analytics' | 'settings'
 
 declare global {
-  interface Window { google?: any }
+  interface Window {
+    google?: any
+    __QUEUE_SENSE_CONFIG__?: { googleClientId?: string }
+  }
 }
 
 function getDefaultHostIp(): string {
@@ -295,7 +298,7 @@ export default function App() {
 
   useEffect(() => {
     if (!showLoginModal || !googleButtonRef.current) return
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    const clientId = window.__QUEUE_SENSE_CONFIG__?.googleClientId || import.meta.env.VITE_GOOGLE_CLIENT_ID
     if (!clientId) {
       setLoginError('Google Sign-In is not configured yet.')
       return

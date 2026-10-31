@@ -2,12 +2,16 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from threading import Lock
 import time
+from pathlib import Path
+import json
 import uuid
 
 import os
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from database import (
@@ -86,6 +90,17 @@ app.add_middleware(
 )
 
 app.include_router(phone_camera_router)
+
+
+@app.get("/runtime-config.js", include_in_schema=False)
+def runtime_config():
+    """Browser-safe runtime values for the single-container deployment."""
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+    return Response(
+        content=f"window.__QUEUE_SENSE_CONFIG__={{googleClientId:{json.dumps(client_id)}}};",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 class CameraCreate(BaseModel):
@@ -309,3 +324,16 @@ def get_activity():
         ]
         return {"items": items, "count": len(items), "data_mode": "live"}
     return cached("activity", 3.0, load_activity)
+
+
+# Render deployment: serve the Vite build from the same HTTPS origin as the API.
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def single_page_app(path: str):
+        requested = STATIC_DIR / path
+        if path and requested.is_file():
+            return FileResponse(requested)
+        return FileResponse(STATIC_DIR / "index.html")
