@@ -17,3 +17,9 @@ For a separate frontend/backend deployment, set `VITE_API_BASE_URL` at frontend 
 This repository includes `render.yaml` and `Dockerfile.render` for a single public service. In Render, select **New → Blueprint**, connect `queuesense/QueueSense`, and provide `APP_OWNER_EMAIL` and `GOOGLE_CLIENT_ID`. Render generates `APP_AUTH_SECRET`.
 
 After Render gives you its HTTPS URL, add that exact URL to the Google OAuth Client's **Authorized JavaScript origins**. The production build reads the Google Client ID from the backend at runtime, so no client ID is committed to Git.
+
+## Deploy the dashboard on Vercel
+
+Vercel should host the `frontend` folder only. The AI backend and phone-camera page must remain on Render because YOLO inference requires a long-running Python process.
+
+In Vercel, import this GitHub repository and set **Root Directory** to `frontend`. Add `VITE_API_BASE_URL`, `VITE_PHONE_CAMERA_BASE_URL`, and `VITE_GOOGLE_CLIENT_ID` using the values in `frontend/.env.example`. After Vercel gives you its URL, add that exact HTTPS origin to Google OAuth and set the Render service `CORS_ORIGINS` to the same Vercel origin.

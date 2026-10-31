@@ -198,6 +198,8 @@ export default function App() {
   const summaryLockRef = useRef(false)
 
   const phoneCameraUrl = useMemo(() => {
+    const phoneBackend = import.meta.env.VITE_PHONE_CAMERA_BASE_URL?.trim()
+    if (phoneBackend) return `${phoneBackend.replace(/\/$/, '')}/phone-camera`
     const configuredBase = import.meta.env.VITE_PUBLIC_BASE_URL?.trim()
     if (configuredBase) return `${configuredBase.replace(/\/$/, '')}/phone-camera`
     // A phone needs HTTPS for getUserMedia. Vite's HTTP development origin is
