@@ -1,0 +1,12 @@
+.git
+.venv*
+**/__pycache__
+**/*.pyc
+backend/queuesense.db
+backend/runs
+backend/certs
+backend/admin_auth.json
+backend/*.bak
+frontend/node_modules
+frontend/dist
+.env

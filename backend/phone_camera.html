@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>QueueSense Sensor Node</title>
+  <style>
+    :root {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #0f172a;
+      background: #f1f5f9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 14px;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .panel {
+      width: 100%;
+      max-width: 440px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+    }
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f1f5f9;
+      margin-bottom: 14px;
+    }
+    .brand {
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: #475569;
+    }
+    .status-pill.active {
+      background: #dcfce7;
+      color: #166534;
+    }
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      margin-bottom: 4px;
+    }
+    input, select {
+      width: 100%;
+      padding: 9px 11px;
+      font: inherit;
+      font-size: 13px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      background: #f8fafc;
+      color: #0f172a;
+      outline: none;
+    }
+    input:focus, select:focus {
+      border-color: #2563eb;
+      background: #ffffff;
+    }
+    input:disabled, select:disabled {
+      opacity: 0.6;
+    }
+    .viewport {
+      width: 100%;
+      height: 220px;
+      background: #09090b;
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 12px 0;
+      border: 1px solid #cbd5e1;
+      position: relative;
+    }
+    .viewport video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .telemetry-strip {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .metric {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 10px;
+      text-align: center;
+    }
+    .metric span {
+      display: block;
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .metric strong {
+      display: block;
+      font-size: 22px;
+      font-weight: 800;
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+      color: #0f172a;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 8px;
+    }
+    button {
+      padding: 11px 14px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      border-radius: 10px;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #2563eb;
+      color: #ffffff;
+    }
+    .btn-primary.active {
+      background: #059669;
+    }
+    .btn-stop {
+      background: #ffffff;
+      border-color: #cbd5e1;
+      color: #334155;
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .log-line {
+      margin-top: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <div class="top-bar">
+      <span class="brand">QueueSense Sensor Node</span>
+      <span id="badge" class="status-pill"><span class="dot"></span>Idle</span>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="cameraId">Sensor Slot</label>
+        <select id="cameraId">
+          <option value="CAM-PHONE-001">CAM-PHONE-001</option>
+          <option value="CAM-PHONE-002">CAM-PHONE-002</option>
+          <option value="CAM-PHONE-003">CAM-PHONE-003</option>
+          <option value="CAM-PHONE-004">CAM-PHONE-004</option>
+        </select>
+      </div>
+      <div>
+        <label for="cameraName">Gate Label</label>
+        <input id="cameraName" value="Gate 1" maxlength="60" autocomplete="off">
+      </div>
+    </div>
+
+    <div>
+      <label for="cameraLocation">Place Folder</label>
+      <select id="cameraLocation">
+        <option value="" selected>Loading places…</option>
+      </select>
+      <input id="customLocation" maxlength="100" autocomplete="off" placeholder="Type a new Place Folder" style="display:none; margin-top:8px;">
+    </div>
+
+    <!-- Camera preview is always visible on the phone for aiming -->
+    <div class="viewport">
+      <video id="preview" autoplay playsinline muted></video>
+    </div>
+    <canvas id="captureCanvas" style="display:none;"></canvas>
+
+    <div class="telemetry-strip">
+      <div class="metric">
+        <span>Zone Count</span>
+        <strong id="mPeople">--</strong>
+      </div>
+      <div class="metric">
+        <span>Sync Cycles</span>
+        <strong id="mRuns">0</strong>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="start" class="btn-primary">Activate Sensor</button>
+      <button id="stop" class="btn-stop" disabled>Stop</button>
+    </div>
+
+    <div id="status" class="log-line">Ready. Tap Activate Sensor to begin crowd counting.</div>
+  </main>
+
+  <script>
+    (() => {
+      const preview = document.getElementById("preview");
+      const canvas = document.getElementById("captureCanvas");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      const startBtn = document.getElementById("start");
+      const stopBtn = document.getElementById("stop");
+      const statusEl = document.getElementById("status");
+      const badgeEl = document.getElementById("badge");
+      const idSelect = document.getElementById("cameraId");
+      const nameInput = document.getElementById("cameraName");
+      const locationSelect = document.getElementById("cameraLocation");
+      const customLocationInput = document.getElementById("customLocation");
+      const mPeople = document.getElementById("mPeople");
+      const mRuns = document.getElementById("mRuns");
+
+      let stream = null;
+      let active = false;
+      let activeCameraId = null;
+      let activeLocation = "";
+      let wakeLock = null;
+
+      function setLocked(locked) {
+        idSelect.disabled = locked;
+        nameInput.disabled = locked;
+        locationSelect.disabled = locked;
+        customLocationInput.disabled = locked;
+      }
+
+      function updateCustomLocationVisibility() {
+        const isOther = locationSelect.value === "__other__";
+        customLocationInput.style.display = isOther ? "block" : "none";
+        if (isOther) customLocationInput.focus();
+      }
+
+      function selectedLocation() {
+        return locationSelect.value === "__other__"
+          ? customLocationInput.value.trim()
+          : locationSelect.value.trim();
+      }
+
+      async function loadPlaceFolders() {
+        try {
+          const response = await fetch("/api/places", { cache: "no-store" });
+          const data = await response.json();
+          const places = Array.isArray(data.items) ? data.items : [];
+          locationSelect.innerHTML = "";
+          if (places.length) {
+            for (const place of places) {
+              const option = document.createElement("option");
+              option.value = place;
+              option.textContent = place;
+              locationSelect.appendChild(option);
+            }
+          } else {
+            const option = document.createElement("option");
+            option.value = "Main Entrance";
+            option.textContent = "Main Entrance";
+            locationSelect.appendChild(option);
+          }
+          const otherOption = document.createElement("option");
+          otherOption.value = "__other__";
+          otherOption.textContent = "Other — type a new place";
+          locationSelect.appendChild(otherOption);
+        } catch (_) {
+          locationSelect.innerHTML = '<option value="Main Entrance">Main Entrance</option><option value="__other__">Other — type a new place</option>';
+        }
+      }
+
+      async function requestWakeLock() {
+        try {
+          if ("wakeLock" in navigator) {
+            wakeLock = await navigator.wakeLock.request("screen");
+          }
+        } catch (_) {}
+      }
+
+      async function stopSensor(msg = "Sensor stopped.") {
+        active = false;
+        if (wakeLock) {
+          try { await wakeLock.release(); } catch (_) {}
+          wakeLock = null;
+        }
+        if (stream) {
+          stream.getTracks().forEach(t => t.stop());
+          stream = null;
+        }
+        preview.srcObject = null;
+
+        if (activeCameraId) {
+          try {
+            await fetch("/api/phone-camera/stop", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ camera_id: activeCameraId })
+            });
+          } catch (_) {}
+        }
+
+        activeCameraId = null;
+        setLocked(false);
+        startBtn.disabled = false;
+        startBtn.textContent = "Activate Sensor";
+        startBtn.className = "btn-primary";
+        stopBtn.disabled = true;
+        badgeEl.className = "status-pill";
+        badgeEl.innerHTML = '<span class="dot"></span>Idle';
+        statusEl.textContent = msg;
+      }
+
+      async function syncLoop() {
+        const targetWidth = 640;
+        const targetHeight = 360;
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        while (active) {
+          const t0 = performance.now();
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+          try {
+            if (preview.readyState >= 2 && preview.videoWidth > 0) {
+              ctx.drawImage(preview, 0, 0, targetWidth, targetHeight);
+              const dataUrl = canvas.toDataURL("image/jpeg", 0.66);
+
+              const response = await fetch("/api/phone-camera/frame", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  camera_id: activeCameraId,
+                  camera_name: nameInput.value.trim() || "Gate 1",
+                  location: activeLocation,
+                  image: dataUrl
+                }),
+                signal: controller.signal
+              });
+
+              const result = await response.json();
+              if (!response.ok) throw new Error(result.detail || "Sync error");
+
+              mPeople.textContent = result.people_count ?? 0;
+              mRuns.textContent = result.detection_runs ?? 0;
+              badgeEl.className = "status-pill active";
+              badgeEl.innerHTML = '<span class="dot"></span>Online';
+              statusEl.textContent = `${result.camera_id} · Folder: ${activeLocation}`;
+            }
+          } catch (err) {
+            if (!active) break;
+            const detail = err?.message || String(err);
+            statusEl.textContent = `Upload error: ${detail}`;
+          } finally {
+            clearTimeout(timeoutId);
+          }
+
+          const elapsed = performance.now() - t0;
+          const waitMs = Math.max(30, 110 - elapsed);
+          await new Promise(r => setTimeout(r, waitMs));
+        }
+      }
+
+      async function startSensor() {
+        if (active) return;
+        startBtn.disabled = true;
+        startBtn.textContent = "Starting...";
+        stopBtn.disabled = false;
+        setLocked(true);
+        activeCameraId = idSelect.value || "CAM-PHONE-001";
+        activeLocation = selectedLocation();
+
+        try {
+          if (!activeLocation) {
+            throw new Error("Select a Place Folder or type one under Other.");
+          }
+          if (!window.isSecureContext) {
+            throw new Error("HTTPS port 8443 required.");
+          }
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 640 },
+              height: { ideal: 360 }
+            }
+          });
+
+          preview.srcObject = stream;
+          await preview.play();
+          await requestWakeLock();
+
+          active = true;
+          startBtn.textContent = "Sensor Active";
+          startBtn.className = "btn-primary active";
+          void syncLoop();
+        } catch (error) {
+          await stopSensor("Error: " + (error?.message || String(error)));
+        }
+      }
+
+      startBtn.addEventListener("click", startSensor);
+      stopBtn.addEventListener("click", () => stopSensor());
+      locationSelect.addEventListener("change", updateCustomLocationVisibility);
+      void loadPlaceFolders();
+      window.addEventListener("pagehide", () => stopSensor());
+    })();
+  </script>
+</body>
+</html>
