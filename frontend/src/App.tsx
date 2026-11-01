@@ -236,25 +236,49 @@ export default function App() {
     if (nextSection !== 'explorer') setInspectedCameraId(null)
   }, [location.search])
 
-  async function handleGoogleLogin(credential: string) {
-    setLoginError('')
-    setIsSigningIn(true)
-    try {
-      const user = await loginWithGoogle(credential)
-      setIsAdmin(user.role === 'admin')
-      setIsAuthenticated(true)
-      setShowLoginModal(false)
-      if (user.role === 'admin') {
+
+async function handleGoogleLogin(credential: string) {
+  setLoginError('')
+  setIsSigningIn(true)
+
+  try {
+    // Step 1: Authenticate with Google
+    const user = await loginWithGoogle(credential)
+
+    // Step 2: Complete login immediately
+    setIsAdmin(user.role === 'admin')
+    setIsAuthenticated(true)
+    setShowLoginModal(false)
+
+    showToast('Signed in successfully')
+
+    // Step 3: Load admin users separately
+    if (user.role === 'admin') {
+      try {
         const result = await getUsers()
         setUsers(result.items)
+      } catch (error) {
+        console.error('Failed to load users:', error)
+        setUserMessage(
+          'Signed in, but could not load the user list.'
+        )
       }
-      showToast('Signed in successfully')
-    } catch {
-      setLoginError('Google sign-in could not be completed.')
-    } finally {
-      setIsSigningIn(false)
     }
+
+  } catch (error) {
+    console.error('Google authentication failed:', error)
+
+    setLoginError(
+      error instanceof Error
+        ? error.message
+        : 'Google authentication failed. Please try again.'
+    )
+
+  } finally {
+    setIsSigningIn(false)
   }
+}
+
 
   async function handleUserRoleChange(userId: number, role: UserRole) {
     setUserMessage('')
