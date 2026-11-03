@@ -100,6 +100,8 @@ type PlaceFolder = {
   bestCamera: CameraNode | null
 }
 
+const IMMUTABLE_ADMIN_EMAIL = 'queuesense07@gmail.com'
+
 type SectionView = 'explorer' | 'wayfinding' | 'analytics' | 'settings'
 
 declare global {
@@ -2250,7 +2252,11 @@ async function handleGoogleLogin(credential: string) {
                     />
                   </div>
                   <div className="mt-3 max-h-32 divide-y divide-slate-100 overflow-y-auto text-xs">
-                    {visibleUsers.map((user) => <div key={user.id} className="flex items-center justify-between gap-2 py-2"><span className="truncate text-slate-700">{user.email}</span><select value={user.role} onChange={(e) => void handleUserRoleChange(user.id, e.target.value as UserRole)} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold uppercase text-slate-600"><option value="viewer">Viewer</option><option value="operator">Operator</option><option value="admin">Admin</option></select></div>)}
+                    {visibleUsers.map((user) => {
+                      const isPermanentAdmin = user.email.toLowerCase() === IMMUTABLE_ADMIN_EMAIL
+                      const isCurrentAdmin = user.email.toLowerCase() === userEmail.toLowerCase()
+                      return <div key={user.id} className="flex items-center justify-between gap-2 py-2"><span className="truncate text-slate-700">{user.email}</span>{isPermanentAdmin ? <span className="rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-extrabold uppercase text-blue-700">Permanent admin</span> : <select value={user.role} disabled={isCurrentAdmin} onChange={(e) => void handleUserRoleChange(user.id, e.target.value as UserRole)} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold uppercase text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"><option value="viewer">Viewer</option><option value="operator">Operator</option><option value="admin">Admin</option></select>}</div>
+                    })}
                     {visibleUsers.length === 0 && <p className="py-3 text-center text-slate-400">No matching signed-in accounts.</p>}
                   </div>
                 </div>

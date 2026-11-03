@@ -26,7 +26,7 @@ from database import (
 from phone_camera import router as phone_camera_router
 from auth import (
     authenticate_google, create_access_token, initialize_admin, require_admin,
-    require_operator, require_user,
+    require_operator, require_user, IMMUTABLE_ADMIN_EMAIL,
 )
 from database import list_users, update_user_role
 
@@ -140,11 +140,19 @@ def get_users():
     return {"items": list_users()}
 
 
-@app.patch("/api/users/{user_id}/role", dependencies=[Depends(require_admin)])
-def update_user_role_endpoint(user_id: int, payload: UserRoleUpdate):
+@app.patch("/api/users/{user_id}/role")
+def update_user_role_endpoint(
+    user_id: int,
+    payload: UserRoleUpdate,
+    claims: dict = Depends(require_admin),
+):
     user = next((item for item in list_users() if item["id"] == user_id), None)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
+    if user["email"].lower() == IMMUTABLE_ADMIN_EMAIL:
+        raise HTTPException(status_code=403, detail="The permanent owner role cannot be changed.")
+    if user_id == int(claims["sub"]):
+        raise HTTPException(status_code=403, detail="Administrators cannot change their own role.")
     update_user_role(user_id, payload.role)
     return {"message": "User role updated."}
 
