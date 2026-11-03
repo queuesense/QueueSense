@@ -225,8 +225,8 @@ export default function App() {
   }
 
   function navigateTo(nextSection: SectionView) {
-    if (nextSection === section) return
     setMobileSidebarOpen(false)
+    if (nextSection === section) return
     setIsNavigating(true)
     window.setTimeout(() => {
       setSection(nextSection)
@@ -243,16 +243,6 @@ export default function App() {
     setActivePlaceName(nextSection === 'explorer' ? placeFromUrl : null)
     if (nextSection !== 'explorer') setInspectedCameraId(null)
   }, [location.search])
-
-  // Phones open directly to the compact queue board. The desktop workspace is
-  // still available on larger screens, where its persistent sidebar is useful.
-  useEffect(() => {
-    if (!window.matchMedia('(max-width: 767px)').matches || section === 'wayfinding') return
-    setSection('wayfinding')
-    setActivePlaceName(null)
-    setInspectedCameraId(null)
-    navigate('/?view=wayfinding', { replace: true })
-  }, [navigate, section])
 
 
 async function handleGoogleLogin(credential: string) {
@@ -786,7 +776,7 @@ async function handleGoogleLogin(credential: string) {
       )}
       {/* TOP COMMAND HEADER */}
       <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-6 backdrop-blur-xl">
-        <div className="flex items-center gap-6">
+        <div className="brand-area flex items-center gap-6">
           <button
             type="button"
             aria-label="Toggle navigation"
@@ -850,7 +840,7 @@ async function handleGoogleLogin(credential: string) {
         </div>
 
         {/* RIGHT CONTROLS */}
-        <div className="flex items-center gap-2.5">
+        <div className="header-actions flex items-center gap-2.5">
           {canOperate ? (
             <>
               <button
@@ -927,6 +917,18 @@ async function handleGoogleLogin(credential: string) {
         {/* LEFT SPATIAL SIDEBAR */}
         <aside className={`mobile-sidebar flex w-64 shrink-0 flex-col justify-between border-r border-slate-200/80 bg-white/80 p-4 backdrop-blur-md ${mobileSidebarOpen ? 'mobile-sidebar-open' : ''}`}>
           <div className="space-y-5">
+            <div className="mobile-session-actions hidden space-y-2">
+              {canOperate && (
+                <button onClick={() => { setShowPairModal(true); setMobileSidebarOpen(false) }} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-xs font-extrabold text-white">
+                  <Smartphone size={15} /> Pair sensor
+                </button>
+              )}
+              {isAuthenticated && (
+                <button onClick={() => { setShowSignOutConfirm(true); setMobileSidebarOpen(false) }} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-extrabold text-slate-700">
+                  <LogOut size={15} /> Sign out
+                </button>
+              )}
+            </div>
             <div className="space-y-1">
               <p className="px-2.5 pb-1 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">
                 Navigation
@@ -992,6 +994,7 @@ async function handleGoogleLogin(credential: string) {
                     setSection('explorer')
                     setActivePlaceName(null)
                     setInspectedCameraId(null)
+                    setMobileSidebarOpen(false)
                   }}
                   className="text-[10px] font-bold text-blue-600 hover:underline"
                 >
@@ -1012,6 +1015,7 @@ async function handleGoogleLogin(credential: string) {
                         setSection('explorer')
                         setActivePlaceName(folder.name)
                         setInspectedCameraId(null)
+                        setMobileSidebarOpen(false)
                       }}
                       className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold transition ${
                         isOpen
