@@ -499,6 +499,22 @@ async function handleGoogleLogin(credential: string) {
         setHostIp(autoIp)
       }
       setPhoneSessions(status.sessions ?? [])
+      const activeCameraIds = new Set(
+        (status.sessions ?? [])
+          .filter((session) => session.connected && session.receiving_frames)
+          .map((session) => session.camera_id),
+      )
+      // A phone stop removes its live session immediately. Mirror that state
+      // locally instead of waiting for the next database refresh.
+      setDbCameras((current) =>
+        current.map((camera) =>
+          camera.data_source === 'camera' &&
+          camera.status === 'online' &&
+          !activeCameraIds.has(camera.id)
+            ? { ...camera, status: 'offline', people_count: 0, queue_length: 0, congestion: 'Low' }
+            : camera,
+        ),
+      )
       setConnected(true)
       setLastSync(new Date())
     } catch {

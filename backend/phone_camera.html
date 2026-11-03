@@ -253,6 +253,7 @@
       let active = false;
       let activeCameraId = null;
       let activeLocation = "";
+      let activeControlKey = null;
       let wakeLock = null;
       let cameras = [];
 
@@ -349,12 +350,14 @@
             await fetch("/api/phone-camera/stop", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ camera_id: activeCameraId })
+              body: JSON.stringify({ camera_id: activeCameraId, control_key: activeControlKey })
             });
           } catch (_) {}
         }
 
         activeCameraId = null;
+        activeControlKey = null;
+        mPeople.textContent = "0";
         setLocked(false);
         startBtn.disabled = false;
         startBtn.textContent = "Activate Sensor";
@@ -388,6 +391,7 @@
                   camera_id: activeCameraId,
                   camera_name: nameInput.value.trim() || "Gate 1",
                   location: activeLocation,
+                  control_key: activeControlKey,
                   image: dataUrl
                 }),
                 signal: controller.signal
@@ -396,6 +400,7 @@
               const result = await response.json();
               if (!response.ok) throw new Error(result.detail || "Sync error");
 
+              activeControlKey = result.control_key || activeControlKey;
               mPeople.textContent = result.people_count ?? 0;
               mRuns.textContent = result.detection_runs ?? 0;
               badgeEl.className = "status-pill active";

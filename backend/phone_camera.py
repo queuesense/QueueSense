@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hmac
 import re
+import secrets
 import socket
 import threading
 import time
@@ -337,12 +339,14 @@ class FrameRequest(BaseModel):
     camera_id: str | None = Field(default=None, max_length=32)
     camera_name: str = Field(default="Gate Sensor", max_length=100)
     location: str = Field(default="Main Entrance", max_length=150)
+    control_key: str | None = Field(default=None, max_length=128)
     image: str = Field(min_length=20, max_length=4_000_000)
 
 
 class StopRequest(BaseModel):
     session_id: str | None = None
     camera_id: str | None = None
+    control_key: str | None = Field(default=None, max_length=128)
 
 
 class RoiUpdateRequest(BaseModel):
@@ -414,9 +418,14 @@ async def receive_frame(payload: FrameRequest):
     async with sessions_lock:
         state = sessions.get(camera_id)
         if state is None:
+            # A delayed upload from a stopped session must never resurrect a
+            # camera after its stop request has marked it offline.
+            if payload.control_key:
+                raise HTTPException(status_code=409, detail="The sensor session has ended. Start it again to reconnect.")
             state = {
                 "id": f"session-{camera_id.lower()}",
                 "camera_id": camera_id,
+                "control_key": secrets.token_urlsafe(32),
                 "name": camera_name,
                 "location": location,
                 "connected": True,
@@ -442,6 +451,10 @@ async def receive_frame(payload: FrameRequest):
             state["worker_task"] = asyncio.create_task(yolo_worker_loop(state))
             sessions[camera_id] = state
         else:
+            if not payload.control_key or not hmac.compare_digest(
+                payload.control_key, state["control_key"]
+            ):
+                raise HTTPException(status_code=403, detail="This phone is not authorized for the sensor session.")
             state["name"] = camera_name
             state["location"] = location
             state["connected"] = True
@@ -462,6 +475,7 @@ async def receive_frame(payload: FrameRequest):
         "ok": True,
         "session_id": state["id"],
         "camera_id": camera_id,
+        "control_key": state["control_key"],
         "people_count": state["people_count"],
         "detection_runs": state["detection_runs"],
         "average_confidence": state["average_confidence"],
@@ -530,22 +544,22 @@ async def phone_camera_status():
     }
 
 
-@router.post("/api/phone-camera/stop", dependencies=[Depends(require_operator)])
+@router.post("/api/phone-camera/stop")
 async def stop_phone_camera(payload: StopRequest | None = None):
     target_session_id = payload.session_id if payload else None
     target_camera_id = payload.camera_id if payload else None
 
+    if not target_camera_id or not payload or not payload.control_key:
+        raise HTTPException(status_code=422, detail="Camera ID and session control key are required.")
+
     async with sessions_lock:
-        if target_session_id or target_camera_id:
-            to_stop = [
-                cid
-                for cid, item in sessions.items()
-                if cid == target_camera_id or item["id"] == target_session_id
-            ]
-            stopped_items = [sessions.pop(cid) for cid in to_stop]
+        item = sessions.get(target_camera_id)
+        if item is None:
+            stopped_items = []
+        elif not hmac.compare_digest(payload.control_key, item["control_key"]):
+            raise HTTPException(status_code=403, detail="This phone is not authorized for the sensor session.")
         else:
-            stopped_items = list(sessions.values())
-            sessions.clear()
+            stopped_items = [sessions.pop(target_camera_id)]
 
     for item in stopped_items:
         task = item.get("worker_task")

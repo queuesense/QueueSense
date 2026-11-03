@@ -210,7 +210,12 @@ def save_camera(camera: dict):
 def set_camera_offline(camera_id: str):
     with get_connection() as connection:
         connection.execute(
-            "UPDATE cameras SET status = 'offline' WHERE id = ?",
+            """
+            UPDATE cameras
+            SET status = 'offline', people_count = 0, queue_length = 0,
+                congestion = 'Low'
+            WHERE id = ?
+            """,
             (camera_id,),
         )
         connection.commit()
