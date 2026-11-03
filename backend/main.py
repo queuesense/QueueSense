@@ -26,7 +26,7 @@ from database import (
 from phone_camera import router as phone_camera_router
 from auth import (
     authenticate_google, create_access_token, initialize_admin, require_admin,
-    require_user,
+    require_operator, require_user,
 )
 from database import list_users, update_user_role
 
@@ -80,14 +80,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-allowed_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()]
+
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
 
 app.include_router(phone_camera_router)
 
@@ -204,12 +211,12 @@ def health_check():
 
 
 @app.get("/api/summary")
-def get_summary():
+def get_summary(_: dict = Depends(require_user)):
     return cached("summary", 1.0, lambda: camera_summary(list_cameras()))
 
 
 @app.get("/api/cameras")
-def get_cameras_endpoint():
+def get_cameras_endpoint(_: dict = Depends(require_user)):
     def load_cameras():
         cameras = list_cameras()
         return {"items": cameras, "count": len(cameras), "data_mode": "live"}
@@ -230,7 +237,7 @@ def get_places_endpoint():
 
 
 @app.get("/api/cameras/{camera_id}")
-def get_camera_endpoint(camera_id: str):
+def get_camera_endpoint(camera_id: str, _: dict = Depends(require_user)):
     camera = get_camera(camera_id)
     if camera is None:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -241,6 +248,7 @@ def get_camera_endpoint(camera_id: str):
 def get_camera_detection_history(
     camera_id: str,
     limit: int = Query(default=100, ge=1, le=1000),
+    _: dict = Depends(require_user),
 ):
     return cached(
         f"history:{camera_id}:{limit}",
@@ -249,7 +257,7 @@ def get_camera_detection_history(
     )
 
 
-@app.post("/api/cameras", status_code=201, dependencies=[Depends(require_admin)])
+@app.post("/api/cameras", status_code=201, dependencies=[Depends(require_operator)])
 def create_camera_endpoint(camera_data: CameraCreate):
     name = camera_data.name.strip()
     location = camera_data.location.strip()
@@ -296,7 +304,7 @@ def delete_camera_endpoint(camera_id: str):
 
 
 @app.get("/api/alerts")
-def get_alerts():
+def get_alerts(_: dict = Depends(require_user)):
     def load_alerts():
         alerts = build_live_alerts(list_cameras())
         return {"items": alerts, "count": len(alerts), "data_mode": "live"}
@@ -304,7 +312,7 @@ def get_alerts():
 
 
 @app.get("/api/activity")
-def get_activity():
+def get_activity(_: dict = Depends(require_user)):
     def load_activity():
         with get_connection() as conn:
             rows = conn.execute(

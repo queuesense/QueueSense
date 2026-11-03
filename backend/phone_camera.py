@@ -17,8 +17,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from ultralytics import YOLO
 
-from database import set_camera_offline, update_live_camera_detection
-from auth import require_admin
+from database import list_cameras, set_camera_offline, update_live_camera_detection
+from auth import require_operator
 
 cv2.setNumThreads(1)
 
@@ -29,9 +29,9 @@ PHONE_PAGE = BASE_DIR / "phone_camera.html"
 MODEL_PATH = BASE_DIR / "yolo11n.pt"
 
 DEFAULT_CAPACITY = 50
-CONFIDENCE_THRESHOLD = 0.20
+CONFIDENCE_THRESHOLD = 0.35
 IOU_THRESHOLD = 0.45
-INFERENCE_SIZE = 480
+INFERENCE_SIZE = 640
 DB_WRITE_INTERVAL_SEC = 2.0
 
 _model: YOLO | None = None
@@ -217,8 +217,10 @@ def render_annotated_preview(
 
 
 def decode_base64_frame(data_url: str) -> np.ndarray:
-    encoded = data_url.split(",", 1)[1] if "," in data_url else data_url
-    raw_bytes = base64.b64decode(encoded)
+    if not data_url.startswith("data:image/jpeg;base64,"):
+        raise ValueError("Frame must be a JPEG data URL.")
+    encoded = data_url.split(",", 1)[1]
+    raw_bytes = base64.b64decode(encoded, validate=True)
     arr = np.frombuffer(raw_bytes, dtype=np.uint8)
     image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if image is None or image.size == 0:
@@ -276,7 +278,12 @@ async def yolo_worker_loop(state: dict[str, Any]) -> None:
                 )
                 now = time.time()
                 prev_count = state["people_count"]
-                new_count = result["people_count"]
+                raw_count = result["people_count"]
+                # Smooth short-lived detector noise from blur and occlusion.
+                recent_counts = state.setdefault("recent_counts", [])
+                recent_counts.append(raw_count)
+                del recent_counts[:-5]
+                new_count = int(round(float(np.median(recent_counts))))
 
                 state["latest_boxes"] = result["boxes"]
                 state["people_count"] = new_count
@@ -347,7 +354,7 @@ class RoiUpdateRequest(BaseModel):
     y2: float = Field(default=0.9, ge=0.0, le=1.0)
 
 
-@router.post("/api/phone-camera/roi", dependencies=[Depends(require_admin)])
+@router.post("/api/phone-camera/roi", dependencies=[Depends(require_operator)])
 async def update_camera_roi(payload: RoiUpdateRequest):
     cid = _sanitize_camera_id(payload.camera_id)
     if not payload.enabled:
@@ -379,6 +386,17 @@ async def phone_camera_page():
     )
 
 
+@router.get("/api/phone-camera/options")
+async def phone_camera_options():
+    """Minimal public pairing metadata; never exposes live counts or footage."""
+    return {
+        "items": [
+            {"id": camera["id"], "name": camera["name"], "location": camera["location"]}
+            for camera in list_cameras()
+        ]
+    }
+
+
 @router.post("/api/phone-camera/frame")
 async def receive_frame(payload: FrameRequest):
     camera_id = _sanitize_camera_id(payload.camera_id)
@@ -408,6 +426,7 @@ async def receive_frame(payload: FrameRequest):
                 "last_frame_at": now,
                 "last_error": None,
                 "people_count": 0,
+                "recent_counts": [],
                 "detection_status": "active",
                 "detection_error": None,
                 "last_detection_at": now,
@@ -451,7 +470,7 @@ async def receive_frame(payload: FrameRequest):
     }
 
 
-@router.get("/api/phone-camera/status", dependencies=[Depends(require_admin)])
+@router.get("/api/phone-camera/status", dependencies=[Depends(require_operator)])
 async def phone_camera_status():
     now = time.time()
 
@@ -511,7 +530,7 @@ async def phone_camera_status():
     }
 
 
-@router.post("/api/phone-camera/stop", dependencies=[Depends(require_admin)])
+@router.post("/api/phone-camera/stop", dependencies=[Depends(require_operator)])
 async def stop_phone_camera(payload: StopRequest | None = None):
     target_session_id = payload.session_id if payload else None
     target_camera_id = payload.camera_id if payload else None

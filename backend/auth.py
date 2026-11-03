@@ -113,6 +113,14 @@ def require_admin(authorization: str | None = Header(default=None)) -> dict:
     return claims
 
 
+def require_operator(authorization: str | None = Header(default=None)) -> dict:
+    """Allow operational actions without granting account administration."""
+    claims = require_user(authorization)
+    if claims["role"] not in {"operator", "admin"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operator access is required.")
+    return claims
+
+
 def authenticate(email: str, password: str):
     user = get_user_by_email(normalize_email(email))
     if user and user["is_active"] and verify_password(password, user["password_hash"]):

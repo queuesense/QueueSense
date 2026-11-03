@@ -137,6 +137,9 @@ export default function App() {
 
   // Local Admin Authentication State
   const [isAdmin, setIsAdmin] = useState<boolean>(false)
+  const [userRole, setUserRole] = useState<UserRole>('viewer')
+  const [userEmail, setUserEmail] = useState('')
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
   const [isSigningIn, setIsSigningIn] = useState<boolean>(false)
@@ -175,6 +178,8 @@ export default function App() {
   const [showPairModal, setShowPairModal] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
   const [toast, setToast] = useState('')
+
+  const canOperate = isAdmin || userRole === 'operator'
 
   // Live Telemetry State
   const [connected, setConnected] = useState(false)
@@ -247,6 +252,8 @@ async function handleGoogleLogin(credential: string) {
 
     // Step 2: Complete login immediately
     setIsAdmin(user.role === 'admin')
+    setUserRole(user.role)
+    setUserEmail(user.email)
     setIsAuthenticated(true)
     setShowLoginModal(false)
 
@@ -309,6 +316,8 @@ async function handleGoogleLogin(credential: string) {
       .then(async (session) => {
         setIsAuthenticated(true)
         setIsAdmin(session.role === 'admin')
+        setUserRole(session.role)
+        setUserEmail(session.email)
         if (session.role === 'admin') setUsers((await getUsers()).items)
       })
       .catch(() => {
@@ -477,7 +486,7 @@ async function handleGoogleLogin(credential: string) {
   // Admin-only preview/status poll. A sub-second interval per connected browser
   // would overload the backend as the number of viewers grows.
   const syncStreams = useCallback(async () => {
-    if (!isAdmin || document.visibilityState !== 'visible') return
+    if (!canOperate || document.visibilityState !== 'visible') return
     if (streamLockRef.current) return
     streamLockRef.current = true
     try {
@@ -494,7 +503,7 @@ async function handleGoogleLogin(credential: string) {
     } finally {
       streamLockRef.current = false
     }
-  }, [isAdmin, manualIpOverride])
+  }, [canOperate, manualIpOverride])
 
   // Shared dashboard data changes at the detector write interval (2 seconds),
   // so a 5-second client refresh is responsive without multiplying DB reads.
@@ -527,14 +536,14 @@ async function handleGoogleLogin(credential: string) {
   }, [inspectedCameraId, isAuthenticated, selectedAnalyticsCamId])
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (!canOperate) {
       setPhoneSessions([])
       return
     }
     void syncStreams()
     const t = window.setInterval(() => void syncStreams(), 1000)
     return () => window.clearInterval(t)
-  }, [isAdmin, syncStreams])
+  }, [canOperate, syncStreams])
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -734,8 +743,20 @@ async function handleGoogleLogin(credential: string) {
     a.click()
   }
 
+  function signOut() {
+    clearAdminToken()
+    setIsAdmin(false)
+    setIsAuthenticated(false)
+    setUserRole('viewer')
+    setUserEmail('')
+    setIsDrawingRoi(false)
+    setShowSignOutConfirm(false)
+    if (section === 'settings') navigateTo('explorer')
+    showToast('Signed out')
+  }
+
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-gradient-to-br from-[#F0F4FA] via-[#F7F9FC] to-[#EEF2FF] text-slate-900 select-none">
+    <div className="queuesense-app flex h-screen w-screen flex-col overflow-hidden bg-gradient-to-br from-[#F0F4FA] via-[#F7F9FC] to-[#EEF2FF] text-slate-900 select-none">
       {isNavigating && (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-950/10 backdrop-blur-[1px]">
           <div className="flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-bold text-white shadow-xl">
@@ -802,7 +823,7 @@ async function handleGoogleLogin(credential: string) {
 
         {/* RIGHT CONTROLS */}
         <div className="flex items-center gap-2.5">
-          {isAdmin ? (
+          {canOperate ? (
             <>
               <button
                 onClick={() => setShowPairModal(true)}
@@ -813,28 +834,16 @@ async function handleGoogleLogin(credential: string) {
               </button>
 
               <button
-                onClick={() => {
-                  clearAdminToken()
-                  setIsAdmin(false)
-                  setIsAuthenticated(false)
-                  setIsDrawingRoi(false)
-                  if (section === 'settings') navigateTo('explorer')
-                  showToast('Logged out of Admin session')
-                }}
+                onClick={() => setShowSignOutConfirm(true)}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
               >
                 <LogOut size={14} className="text-emerald-600" />
-                Admin Active (Logout)
+                Sign out
               </button>
             </>
           ) : isAuthenticated ? (
             <button
-              onClick={() => {
-                clearAdminToken()
-                setIsAuthenticated(false)
-                setShowLoginModal(true)
-                showToast('Signed out')
-              }}
+              onClick={() => setShowSignOutConfirm(true)}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
             >
               <LogOut size={14} /> Signed in (Logout)
@@ -850,6 +859,16 @@ async function handleGoogleLogin(credential: string) {
               <UserCheck size={14} />
               Sign in
             </button>
+          )}
+
+          {isAuthenticated && (
+            <div className="google-account flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#4285f4] via-[#ea4335] to-[#34a853] text-[11px] font-extrabold text-white">G</span>
+              <span className="min-w-0 leading-tight">
+                <span className="block max-w-32 truncate text-[11px] font-bold text-slate-700">{userEmail}</span>
+                <span className="block text-[10px] font-extrabold uppercase tracking-wide text-blue-600">{userRole}</span>
+              </span>
+            </div>
           )}
 
           <div
@@ -1004,6 +1023,9 @@ async function handleGoogleLogin(credential: string) {
               <span className="text-xs font-semibold text-slate-500">
                 people
               </span>
+            </p>
+            <p className="mt-1 text-[11px] font-bold text-slate-500">
+              {summary?.online_cameras ?? onlineCameraNodes.length} active cameras · {summary?.offline_cameras ?? Math.max(0, allCameraNodes.length - onlineCameraNodes.length)} offline
             </p>
             {globalBestCamera ? (
               <div className="mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50/80 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800">
@@ -1319,7 +1341,7 @@ async function handleGoogleLogin(credential: string) {
                     /* SUB-VIEW B: STANDARD CAMERA CARDS GRID */
                     <div className="grid flex-1 auto-rows-max grid-cols-1 gap-5 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
                       {currentPlaceFolder.cameras.map((cam) => {
-                        const showVideo = isAdmin && !hiddenVideoIds.has(cam.id)
+                        const showVideo = canOperate && !hiddenVideoIds.has(cam.id)
                         const isRecordingThis = recordingCamId === cam.id
                         const isBestInPlace =
                           currentPlaceFolder.bestCamera?.id === cam.id &&
@@ -2344,8 +2366,21 @@ async function handleGoogleLogin(credential: string) {
         </div>
       )}
 
+      {showSignOutConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
+          <section role="dialog" aria-modal="true" aria-labelledby="signout-title" className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <h3 id="signout-title" className="text-lg font-extrabold text-slate-900">Sign out of QueueSense?</h3>
+            <p className="mt-1 text-xs text-slate-500">You will need to sign in with Google again to view protected queue data and use your assigned role.</p>
+            <div className="mt-5 flex gap-2">
+              <button onClick={() => setShowSignOutConfirm(false)} className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={signOut} className="flex-1 rounded-xl bg-rose-600 py-2.5 text-xs font-bold text-white hover:bg-rose-700">Yes, sign out</button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* PAIR SENSOR NODE MODAL */}
-      {showPairModal && isAdmin && (
+      {showPairModal && canOperate && (
         <div
           role="presentation"
           onClick={() => setShowPairModal(false)}
