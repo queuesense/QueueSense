@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import Header, HTTPException, status
 
 from database import (
-    create_user, get_user_by_email, get_user_by_google_id, set_user_google_id,
+    create_user, get_user_by_email, get_user_by_google_id, get_user_by_id, set_user_google_id,
     update_user_password, update_user_role,
 )
 
@@ -101,6 +101,13 @@ def require_user(authorization: str | None = Header(default=None)) -> dict:
         valid = scheme.lower() == "bearer" and hmac.compare_digest(signature, _sign(payload))
         if not valid or claims.get("role") not in VALID_ROLES or int(claims["exp"]) <= time.time():
             raise ValueError
+        # Roles can be changed while someone is online. Tokens identify the
+        # account, but authorization always follows the current DB record.
+        user = get_user_by_id(int(claims["sub"]))
+        if not user or not user.get("is_active") or user["role"] not in VALID_ROLES:
+            raise ValueError
+        claims["email"] = user["email"]
+        claims["role"] = user["role"]
         return claims
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sign in is required.")

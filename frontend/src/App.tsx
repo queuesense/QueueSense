@@ -329,6 +329,26 @@ async function handleGoogleLogin(credential: string) {
       })
   }, [])
 
+  // Reflect an administrator's role change for a currently online account.
+  // Backend authorization is immediate; this keeps the visible UI in sync too.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const refreshSession = async () => {
+      try {
+        const session = await getAdminSession()
+        setUserRole(session.role)
+        setUserEmail(session.email)
+        setIsAdmin(session.role === 'admin')
+      } catch {
+        clearAdminToken()
+        setIsAuthenticated(false)
+        setShowLoginModal(true)
+      }
+    }
+    const timer = window.setInterval(() => void refreshSession(), 10_000)
+    return () => window.clearInterval(timer)
+  }, [isAuthenticated])
+
   const visibleUsers = useMemo(() => {
     const query = userSearch.trim().toLowerCase()
     return query ? users.filter((user) => user.email.toLowerCase().includes(query)) : users
