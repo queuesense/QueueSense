@@ -54,16 +54,15 @@ select:focus-visible {
   border-radius: 20px;
 }
 
-/* The dashboard keeps its dense desktop workspace above this breakpoint, then
-   becomes a normal vertically scrolling page so controls and cards are usable
-   on a phone instead of being clipped in a fixed-height canvas. */
+/* Phones use a focused, fixed-height queue board. Navigation stays available
+   behind a deliberate menu button instead of squeezing the desktop sidebar
+   into the page or forcing the entire dashboard to scroll. */
 @media (max-width: 767px) {
   .queuesense-app {
     width: 100%;
-    min-height: 100svh;
-    height: auto;
-    overflow: visible;
-    user-select: auto;
+    height: 100svh;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .queuesense-app > header {
@@ -77,6 +76,7 @@ select:focus-visible {
   .queuesense-app > header p { display: none; }
   .queuesense-app > header .text-base { font-size: 0.9rem; }
   .queuesense-app > header .rounded-full { display: none; }
+  .queuesense-app .mobile-menu { display: inline-flex; }
   .queuesense-app > header .google-account { display: flex; padding: 0.3rem 0.45rem; }
   .queuesense-app > header .google-account > .rounded-full { display: flex; }
   .queuesense-app > header .google-account .max-w-32 { max-width: 5.5rem; }
@@ -85,38 +85,44 @@ select:focus-visible {
   .queuesense-app > header button:not(:has(.lucide)) { font-size: 0.7rem; }
 
   .queuesense-app > div.flex.flex-1 {
-    display: block;
-    overflow: visible;
+    display: flex;
+    min-height: 0;
+    overflow: hidden;
   }
 
-  .queuesense-app aside {
-    width: 100%;
+  .queuesense-app .mobile-sidebar {
+    position: fixed;
+    z-index: 45;
+    top: 4rem;
+    bottom: 0;
+    left: 0;
+    width: min(18rem, 84vw);
     padding: 0.75rem;
-    border-right: 0;
-    border-bottom: 1px solid #e2e8f0;
+    overflow-y: auto;
+    box-shadow: 18px 0 36px rgba(15, 23, 42, 0.16);
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
   }
 
-  .queuesense-app aside > div:first-child { display: grid; gap: 0.75rem; }
-  .queuesense-app aside .space-y-5 { display: contents; }
-  .queuesense-app aside .space-y-1:first-child { order: 0; }
-  .queuesense-app aside .space-y-1:last-child { order: 1; }
-  .queuesense-app aside .max-h-60 { max-height: 9rem; }
-  .queuesense-app aside > div:last-child { display: none; }
+  .queuesense-app .mobile-sidebar.mobile-sidebar-open { transform: translateX(0); }
+  .queuesense-app .mobile-sidebar > div:last-child { display: none; }
 
   .queuesense-app main {
-    min-height: auto;
-    overflow: visible;
-    padding: 0.9rem;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0.75rem;
   }
 
   .queuesense-app main > div,
   .queuesense-app main .h-full {
-    height: auto;
-    overflow: visible;
+    min-height: 0;
   }
 
-  .queuesense-app main .overflow-y-auto { overflow: visible; }
-  .queuesense-app main .grid { gap: 0.85rem; }
+  .queuesense-app main .overflow-y-auto { overflow-y: auto; }
+  .queuesense-app main .grid { gap: 0.75rem; }
   .queuesense-app .rounded-3xl { border-radius: 1.1rem; }
+  .queuesense-app main > .rounded-3xl { padding: 1rem; }
+  .queuesense-app main > .rounded-3xl h1 { font-size: 1.2rem; }
+  .queuesense-app main > .rounded-3xl .p-6 { padding: 1rem; }
   .queuesense-app .fixed.right-5.bottom-5 { right: 0.75rem; bottom: 0.75rem; }
 }

@@ -19,6 +19,7 @@ import {
   FolderOpen,
   LayoutGrid,
   LogOut,
+  Menu,
   Map as MapIcon,
   Maximize2,
   Monitor,
@@ -140,6 +141,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<UserRole>('viewer')
   const [userEmail, setUserEmail] = useState('')
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
   const [isSigningIn, setIsSigningIn] = useState<boolean>(false)
@@ -224,6 +226,7 @@ export default function App() {
 
   function navigateTo(nextSection: SectionView) {
     if (nextSection === section) return
+    setMobileSidebarOpen(false)
     setIsNavigating(true)
     window.setTimeout(() => {
       setSection(nextSection)
@@ -240,6 +243,16 @@ export default function App() {
     setActivePlaceName(nextSection === 'explorer' ? placeFromUrl : null)
     if (nextSection !== 'explorer') setInspectedCameraId(null)
   }, [location.search])
+
+  // Phones open directly to the compact queue board. The desktop workspace is
+  // still available on larger screens, where its persistent sidebar is useful.
+  useEffect(() => {
+    if (!window.matchMedia('(max-width: 767px)').matches || section === 'wayfinding') return
+    setSection('wayfinding')
+    setActivePlaceName(null)
+    setInspectedCameraId(null)
+    navigate('/?view=wayfinding', { replace: true })
+  }, [navigate, section])
 
 
 async function handleGoogleLogin(credential: string) {
@@ -751,7 +764,13 @@ async function handleGoogleLogin(credential: string) {
     setUserEmail('')
     setIsDrawingRoi(false)
     setShowSignOutConfirm(false)
-    if (section === 'settings') navigateTo('explorer')
+    setMobileSidebarOpen(false)
+    setDbCameras([])
+    setPhoneSessions([])
+    setSummary(null)
+    setHistoryItems([])
+    navigate('/', { replace: true })
+    setShowLoginModal(true)
     showToast('Signed out')
   }
 
@@ -768,6 +787,15 @@ async function handleGoogleLogin(credential: string) {
       {/* TOP COMMAND HEADER */}
       <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-6 backdrop-blur-xl">
         <div className="flex items-center gap-6">
+          <button
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded={mobileSidebarOpen}
+            onClick={() => setMobileSidebarOpen((open) => !open)}
+            className="mobile-menu hidden h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700"
+          >
+            <Menu size={19} />
+          </button>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25">
               <Activity size={20} />
@@ -897,7 +925,7 @@ async function handleGoogleLogin(credential: string) {
       {/* MAIN ZERO-SCROLL WORKSPACE */}
       <div className="flex flex-1 overflow-hidden">
         {/* LEFT SPATIAL SIDEBAR */}
-        <aside className="flex w-64 shrink-0 flex-col justify-between border-r border-slate-200/80 bg-white/80 p-4 backdrop-blur-md">
+        <aside className={`mobile-sidebar flex w-64 shrink-0 flex-col justify-between border-r border-slate-200/80 bg-white/80 p-4 backdrop-blur-md ${mobileSidebarOpen ? 'mobile-sidebar-open' : ''}`}>
           <div className="space-y-5">
             <div className="space-y-1">
               <p className="px-2.5 pb-1 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">
