@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
-  BarChart3,
   Camera,
   Check,
   CheckCircle2,
@@ -127,7 +126,7 @@ export default function App() {
   const location = useLocation()
   const viewFromUrl = (): SectionView => {
     const requested = new URLSearchParams(location.search).get('view')
-    return requested === 'wayfinding' || requested === 'analytics' || requested === 'settings'
+    return requested === 'wayfinding' || requested === 'settings'
       ? requested
       : 'explorer'
   }
@@ -144,6 +143,7 @@ export default function App() {
   const [userRole, setUserRole] = useState<UserRole>('viewer')
   const [userEmail, setUserEmail] = useState('')
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
+  const [showAccountMenu, setShowAccountMenu] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
@@ -369,7 +369,13 @@ async function handleGoogleLogin(credential: string) {
       if (!googleButtonRef.current || !window.google) return
       window.clearTimeout(fallbackTimer)
       googleButtonRef.current.replaceChildren()
-      window.google?.accounts.id.initialize({ client_id: clientId, callback: (response: { credential: string }) => void handleGoogleLogin(response.credential) })
+      window.google?.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response: { credential: string }) => void handleGoogleLogin(response.credential),
+        // Google only auto-selects an account after the person has already
+        // approved it; no account chooser is forced into this screen.
+        auto_select: true,
+      })
       window.google.accounts.id.renderButton(googleButtonRef.current, { theme: 'outline', size: 'large', width: 320, text: 'continue_with' })
       setShowGoogleFallback(false)
     }
@@ -919,12 +925,21 @@ async function handleGoogleLogin(credential: string) {
           )}
 
           {isAuthenticated && (
-            <div className="google-account flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#4285f4] via-[#ea4335] to-[#34a853] text-[11px] font-extrabold text-white">G</span>
-              <span className="min-w-0 leading-tight">
-                <span className="block max-w-32 truncate text-[11px] font-bold text-slate-700">{userEmail}</span>
-                <span className="block text-[10px] font-extrabold uppercase tracking-wide text-blue-600">{userRole}</span>
-              </span>
+            <div className="relative">
+              <button type="button" onClick={() => setShowAccountMenu((open) => !open)} aria-expanded={showAccountMenu} className="google-account flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-left hover:border-blue-200 hover:bg-blue-50/40">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#4285f4] via-[#ea4335] to-[#34a853] text-[11px] font-extrabold text-white">G</span>
+                <span className="min-w-0 leading-tight">
+                  <span className="block max-w-32 truncate text-[11px] font-bold text-slate-700">{userEmail}</span>
+                  <span className="block text-[10px] font-extrabold uppercase tracking-wide text-blue-600">{userRole}</span>
+                </span>
+              </button>
+              {showAccountMenu && (
+                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                  <p className="px-2 py-1.5 text-[10px] font-extrabold tracking-wide text-slate-400 uppercase">Signed in as {userRole}</p>
+                  {isAdmin && <button onClick={() => { navigateTo('settings'); setShowAccountMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"><Settings size={14} /> Account settings</button>}
+                  <button onClick={() => { setShowSignOutConfirm(true); setShowAccountMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-rose-700 hover:bg-rose-50"><LogOut size={14} /> Sign out</button>
+                </div>
+              )}
             </div>
           )}
 
@@ -976,18 +991,13 @@ async function handleGoogleLogin(credential: string) {
                 [
                   {
                     id: 'explorer',
-                    label: 'Places Directory',
+                    label: 'Monitored Places',
                     icon: LayoutGrid,
                   },
                   {
                     id: 'wayfinding',
-                    label: 'Public Queue Board',
+                    label: 'Live People View',
                     icon: Monitor,
-                  },
-                  {
-                    id: 'analytics',
-                    label: 'Historical Trends',
-                    icon: BarChart3,
                   },
                   ...(isAdmin
                     ? [
@@ -1123,7 +1133,7 @@ async function handleGoogleLogin(credential: string) {
                   <div className="mb-5 flex shrink-0 flex-wrap items-center justify-between gap-4">
                     <div>
                       <h1 className="text-xl font-extrabold tracking-tight text-slate-900">
-                        IIT KGP Places Directory
+                        IIT KGP Monitored Places
                       </h1>
                       <p className="text-xs font-medium text-slate-500">
                         Live people counts and queue guidance across campus.
@@ -1159,7 +1169,7 @@ async function handleGoogleLogin(credential: string) {
                         <button
                           key={folder.name}
                           onClick={() => setActivePlaceName(folder.name)}
-                          className="group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-5 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-md"
+                          className="place-card group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-5 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-md"
                         >
                           <div>
                             <div className="flex items-start justify-between">
@@ -1420,10 +1430,12 @@ async function handleGoogleLogin(credential: string) {
                         return (
                           <article
                             key={cam.id}
-                            className={`flex flex-col justify-between overflow-hidden rounded-3xl border bg-white shadow-xs transition ${
-                              isBestInPlace
+                            className={`gate-card flex flex-col justify-between overflow-hidden rounded-3xl border shadow-xs transition ${
+                              cam.status === 'Offline'
+                                ? 'gate-card-offline border-slate-950 bg-slate-950'
+                                : isBestInPlace
                                 ? 'border-emerald-400 ring-2 ring-emerald-100'
-                                : 'border-slate-200/90'
+                                : 'border-emerald-300 bg-white'
                             }`}
                           >
                             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -2042,7 +2054,7 @@ async function handleGoogleLogin(credential: string) {
                     PUBLIC WAYFINDING DISPLAY
                   </span>
                   <h1 className="mt-1.5 text-2xl font-extrabold tracking-tight text-slate-900">
-                    Live Entry Gate Queue Board
+                    IIT KGP Live People View
                   </h1>
                 </div>
                 <div className="text-right">
