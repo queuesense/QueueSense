@@ -54,6 +54,38 @@ select:focus-visible {
   border-radius: 20px;
 }
 
+/* Campus identity for the directory: the Main Building stays deliberately
+   subdued so the operational information remains clear above it. */
+.iit-kgp-directory {
+  position: relative;
+  isolation: isolate;
+}
+
+.iit-kgp-directory::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: 1.5rem;
+  opacity: 0.16;
+  background-image:
+    linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(248, 250, 252, 0.72)),
+    url("https://upload.wikimedia.org/wikipedia/commons/1/1a/Main_Building_-_Indian_Institute_of_Technology_-_Kharagpur_-_West_Midnapore_2013-01-26_3688.JPG");
+  background-position: center;
+  background-size: cover;
+  filter: saturate(0.72) contrast(1.08);
+}
+
+.iit-kgp-directory > * {
+  position: relative;
+  z-index: 1;
+}
+
+.iit-kgp-directory button.group {
+  background-color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(5px);
+}
+
 /* Phones use a focused, fixed-height queue board. Navigation stays available
    behind a deliberate menu button instead of squeezing the desktop sidebar
    into the page or forcing the entire dashboard to scroll. */
@@ -124,6 +156,7 @@ select:focus-visible {
   .queuesense-app main .overflow-y-auto { overflow-y: auto; }
   .queuesense-app main .grid { gap: 0.75rem; }
   .queuesense-app .rounded-3xl { border-radius: 1.1rem; }
+  .iit-kgp-directory::before { border-radius: 1.1rem; }
   .queuesense-app main > .rounded-3xl { padding: 1rem; }
   .queuesense-app main > .rounded-3xl h1 { font-size: 1.2rem; }
   .queuesense-app main > .rounded-3xl .p-6 { padding: 1rem; }

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Activity,
   ArrowLeft,
   BarChart3,
   Camera,
@@ -101,6 +100,8 @@ type PlaceFolder = {
 }
 
 const IMMUTABLE_ADMIN_EMAIL = 'queuesense07@gmail.com'
+const IIT_KGP_LOGO_URL =
+  'https://upload.wikimedia.org/wikipedia/en/thumb/1/1c/IIT_Kharagpur_Logo.svg/1200px-IIT_Kharagpur_Logo.svg.png'
 
 type SectionView = 'explorer' | 'wayfinding' | 'analytics' | 'settings'
 
@@ -825,20 +826,20 @@ async function handleGoogleLogin(credential: string) {
             <Menu size={19} />
           </button>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-600/25">
-              <Activity size={20} />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-white p-1 shadow-md shadow-blue-950/10">
+              <img src={IIT_KGP_LOGO_URL} alt="IIT Kharagpur logo" className="h-full w-full object-contain" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-base font-extrabold tracking-tight text-slate-900">
-                  Queue<span className="text-blue-600">Sense</span>
+                  IIT KGP <span className="text-blue-700">Radar</span>
                 </span>
-                <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold text-indigo-700">
-                  SPATIAL OS
+                <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-extrabold text-blue-700">
+                  CAMPUS RADAR
                 </span>
               </div>
               <p className="text-[11px] font-medium text-slate-500">
-                Smart Crowd Routing & Place Directory
+                Live crowd routing across IIT Kharagpur
               </p>
             </div>
           </div>
@@ -1115,18 +1116,17 @@ async function handleGoogleLogin(credential: string) {
               VIEW 1: PLACES EXPLORER
              ========================================================= */}
           {section === 'explorer' && (
-            <div className="flex h-full flex-col overflow-hidden">
+            <div className="iit-kgp-directory flex h-full flex-col overflow-hidden">
               {/* LEVEL 1: PLACE FOLDERS GRID */}
               {!activePlaceName && !inspectedCamera && (
                 <>
                   <div className="mb-5 flex shrink-0 flex-wrap items-center justify-between gap-4">
                     <div>
                       <h1 className="text-xl font-extrabold tracking-tight text-slate-900">
-                        Monitored Places Directory
+                        IIT KGP Places Directory
                       </h1>
                       <p className="text-xs font-medium text-slate-500">
-                        Select any Place folder to view live gate queue counts,
-                        2D floorplans, and estimated wait times.
+                        Live people counts and queue guidance across campus.
                       </p>
                     </div>
 
@@ -2414,16 +2414,16 @@ async function handleGoogleLogin(credential: string) {
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-extrabold text-slate-800">
                 <UserCheck size={13} />
-                QUEUESENSE
+                IIT KGP RADAR
               </span>
               {isAuthenticated && <button onClick={() => setShowLoginModal(false)} className="rounded-xl p-1 text-slate-400 hover:bg-slate-100"><X size={16} /></button>}
             </div>
 
             <h3 className="mt-3 text-lg font-extrabold text-slate-900">
-              Sign in to QueueSense
+              Sign in to IIT KGP Radar
             </h3>
             <p className="mt-1 text-xs text-slate-500">
-              Continue securely with the Google account you use for QueueSense.
+              Continue securely with the Google account you use for IIT Kharagpur access.
             </p>
 
             <div className="mt-5 space-y-3">
@@ -2443,7 +2443,7 @@ async function handleGoogleLogin(credential: string) {
       {showSignOutConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-xs">
           <section role="dialog" aria-modal="true" aria-labelledby="signout-title" className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <h3 id="signout-title" className="text-lg font-extrabold text-slate-900">Sign out of QueueSense?</h3>
+            <h3 id="signout-title" className="text-lg font-extrabold text-slate-900">Sign out of IIT KGP Radar?</h3>
             <p className="mt-1 text-xs text-slate-500">You will need to sign in with Google again to view protected queue data and use your assigned role.</p>
             <div className="mt-5 flex gap-2">
               <button onClick={() => setShowSignOutConfirm(false)} className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
