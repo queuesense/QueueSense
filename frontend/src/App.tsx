@@ -17,12 +17,9 @@ import {
   FolderOpen,
   LayoutGrid,
   LogOut,
-  Menu,
   Map as MapIcon,
   Maximize2,
-  Monitor,
   Plus,
-  Radio,
   Settings,
   Smartphone,
   Sparkles,
@@ -175,7 +172,6 @@ export default function App() {
   const [userEmail, setUserEmail] = useState('')
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false)
   const [showAccountMenu, setShowAccountMenu] = useState(false)
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
   const [isSigningIn, setIsSigningIn] = useState<boolean>(false)
@@ -220,7 +216,7 @@ export default function App() {
   // Live Telemetry State
   const [connected, setConnected] = useState(false)
   const [dbCameras, setDbCameras] = useState<QueueSenseCamera[]>([])
-  const [summary, setSummary] = useState<QueueSenseSummary | null>(null)
+  const [, setSummary] = useState<QueueSenseSummary | null>(null)
   const [phoneSessions, setPhoneSessions] = useState<PhoneCameraDetection[]>([])
   const [selectedAnalyticsCamId, setSelectedAnalyticsCamId] =
     useState<string>('CAM-PHONE-001')
@@ -259,7 +255,6 @@ export default function App() {
   }
 
   function navigateTo(nextSection: SectionView) {
-    setMobileSidebarOpen(false)
     if (nextSection === section) return
     setIsNavigating(true)
     window.setTimeout(() => {
@@ -775,11 +770,6 @@ async function handleGoogleLogin(credential: string) {
     [allCameraNodes],
   )
 
-  const globalBestCamera = onlineCameraNodes[0] ?? null
-  const totalCrowd =
-    summary?.estimated_people ??
-    onlineCameraNodes.reduce((s, c) => s + c.count, 0)
-
   const chartData = useMemo(
     () =>
       [...historyItems].reverse().map((item) => ({
@@ -830,7 +820,6 @@ async function handleGoogleLogin(credential: string) {
     setUserEmail('')
     setIsDrawingRoi(false)
     setShowSignOutConfirm(false)
-    setMobileSidebarOpen(false)
     setDbCameras([])
     setPhoneSessions([])
     setSummary(null)
@@ -853,15 +842,6 @@ async function handleGoogleLogin(credential: string) {
       {/* TOP COMMAND HEADER */}
       <header className="relative z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-6 backdrop-blur-xl">
         <div className="brand-area flex items-center gap-6">
-          <button
-            type="button"
-            aria-label="Toggle navigation"
-            aria-expanded={mobileSidebarOpen}
-            onClick={() => setMobileSidebarOpen((open) => !open)}
-            className="mobile-menu hidden h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700"
-          >
-            <Menu size={19} />
-          </button>
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-white p-1 shadow-md shadow-blue-950/10">
               <KgpLogo />
@@ -1000,98 +980,6 @@ async function handleGoogleLogin(credential: string) {
       {/* MAIN ZERO-SCROLL WORKSPACE */}
       <div className="flex flex-1 overflow-hidden">
         {/* LEFT SPATIAL SIDEBAR */}
-        <aside className={`mobile-sidebar flex w-64 shrink-0 flex-col justify-between border-r border-slate-200/80 bg-white/80 p-4 backdrop-blur-md ${mobileSidebarOpen ? 'mobile-sidebar-open' : ''}`}>
-          <div className="space-y-5">
-            <div className="mobile-session-actions hidden space-y-2">
-              {canOperate && (
-                <button onClick={() => { setShowPairModal(true); setMobileSidebarOpen(false) }} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-xs font-extrabold text-white">
-                  <Smartphone size={15} /> Pair sensor
-                </button>
-              )}
-              {isAuthenticated && (
-                <button onClick={() => { setShowSignOutConfirm(true); setMobileSidebarOpen(false) }} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-extrabold text-slate-700">
-                  <LogOut size={15} /> Sign out
-                </button>
-              )}
-            </div>
-            <div className="space-y-1">
-              <p className="px-2.5 pb-1 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">
-                Navigation
-              </p>
-              {(
-                [
-                  {
-                    id: 'explorer',
-                    label: 'Monitored Places',
-                    icon: LayoutGrid,
-                  },
-                  {
-                    id: 'wayfinding',
-                    label: 'Live People View',
-                    icon: Monitor,
-                  },
-                  ...(isAdmin
-                    ? [
-                        {
-                          id: 'settings' as const,
-                          label: 'Admin & Security',
-                          icon: Settings,
-                        },
-                      ]
-                    : []),
-                ] as const
-              ).map((item) => {
-                const Icon = item.icon
-                const active = section === item.id
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      navigateTo(item.id)
-                    }}
-                    className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-xs font-bold transition ${
-                      active
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm shadow-blue-600/20'
-                        : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
-                    }`}
-                  >
-                    <Icon size={15} />
-                    {item.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* LIVE VENUE RADAR WIDGET */}
-          <div className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/60 p-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-extrabold text-blue-700 uppercase">
-                Live Venue Count
-              </span>
-              <Radio size={14} className="text-blue-600" />
-            </div>
-            <p className="mt-1.5 text-3xl font-extrabold tracking-tight text-slate-900 tabular-nums">
-              {totalCrowd}{' '}
-              <span className="text-xs font-semibold text-slate-500">
-                people
-              </span>
-            </p>
-            <p className="mt-1 text-[11px] font-bold text-slate-500">
-              {summary?.online_cameras ?? onlineCameraNodes.length} active cameras · {summary?.offline_cameras ?? Math.max(0, allCameraNodes.length - onlineCameraNodes.length)} offline
-            </p>
-            {globalBestCamera ? (
-              <div className="mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50/80 px-2.5 py-1.5 text-[11px] font-bold text-emerald-800">
-                Fastest: {globalBestCamera.name} ({globalBestCamera.count})
-              </div>
-            ) : (
-              <p className="mt-2 text-[11px] text-slate-400">
-                No active gates online
-              </p>
-            )}
-          </div>
-        </aside>
-
         {/* CENTER FIXED STAGE */}
         <main className="flex flex-1 flex-col overflow-hidden p-6">
           {/* =========================================================
