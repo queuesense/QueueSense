@@ -843,7 +843,7 @@ async function handleGoogleLogin(credential: string) {
       <header className="relative z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-6 backdrop-blur-xl">
         <div className="brand-area flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-white p-1 shadow-md shadow-blue-950/10">
+            <div className="kgp-logo-wrap flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-white p-0.5 shadow-md shadow-blue-950/10">
               <KgpLogo />
             </div>
             <div>
@@ -851,7 +851,7 @@ async function handleGoogleLogin(credential: string) {
                 <span className="text-base font-extrabold tracking-tight text-slate-900">
                   IIT KGP <span className="text-blue-700">Radar</span>
                 </span>
-                <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-extrabold text-blue-700">
+                <span className="campus-badge rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-extrabold text-blue-700">
                   CAMPUS RADAR
                 </span>
               </div>
@@ -947,6 +947,7 @@ async function handleGoogleLogin(credential: string) {
               {showAccountMenu && (
                 <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
                   <p className="px-2 py-1.5 text-[10px] font-extrabold tracking-wide text-slate-400 uppercase">Signed in as {userRole}</p>
+                  {canOperate && <button onClick={() => { setShowPairModal(true); setShowAccountMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100 md:hidden"><Smartphone size={14} /> Pair sensor node</button>}
                   {isAdmin && <button onClick={() => { navigateTo('settings'); setShowAccountMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"><Settings size={14} /> Account settings</button>}
                   <button onClick={() => { setShowSignOutConfirm(true); setShowAccountMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-rose-700 hover:bg-rose-50"><LogOut size={14} /> Sign out</button>
                 </div>

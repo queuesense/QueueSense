@@ -97,11 +97,12 @@ select:focus-visible {
 
 .place-card {
   background-image:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.6)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.48) 26%, rgba(255, 255, 255, 0.84) 44%, rgba(255, 255, 255, 0.95) 68%),
     var(--place-photo, none),
     url("https://upload.wikimedia.org/wikipedia/commons/1/1a/Main_Building_-_Indian_Institute_of_Technology_-_Kharagpur_-_West_Midnapore_2013-01-26_3688.JPG");
   background-position: center;
   background-size: cover;
+  min-height: 15.5rem;
 }
 
 .gate-card-offline {
@@ -141,8 +142,8 @@ select:focus-visible {
   .queuesense-app > header .brand-area { gap: 0.5rem; min-width: 0; }
   .queuesense-app > header p { display: none; }
   .queuesense-app > header .text-base { font-size: 0.9rem; }
-  .queuesense-app > header .rounded-full { display: none; }
-  .queuesense-app .mobile-menu { display: inline-flex; }
+  .queuesense-app > header .campus-badge { display: none; }
+  .queuesense-app > header .kgp-logo-wrap { display: flex; height: 2.5rem; width: 2.5rem; }
   .queuesense-app > header .brand-area > div:not(:first-of-type),
   .queuesense-app > header .header-actions > button,
   .queuesense-app > header .header-actions > div:last-child { display: none; }
@@ -157,24 +158,6 @@ select:focus-visible {
     min-height: 0;
     overflow: hidden;
   }
-
-  .queuesense-app .mobile-sidebar {
-    position: fixed;
-    z-index: 45;
-    top: 3.75rem;
-    bottom: 0;
-    left: 0;
-    width: min(18rem, 84vw);
-    padding: 0.75rem;
-    overflow-y: auto;
-    box-shadow: 18px 0 36px rgba(15, 23, 42, 0.16);
-    transform: translateX(-105%);
-    transition: transform 180ms ease;
-  }
-
-  .queuesense-app .mobile-sidebar.mobile-sidebar-open { transform: translateX(0); }
-  .queuesense-app .mobile-sidebar .mobile-session-actions { display: block; }
-  .queuesense-app .mobile-sidebar > div:last-child { display: none; }
 
   .queuesense-app main {
     min-height: 0;
