@@ -99,8 +99,39 @@ type PlaceFolder = {
 }
 
 const IMMUTABLE_ADMIN_EMAIL = 'queuesense07@gmail.com'
-const IIT_KGP_LOGO_URL =
-  'https://upload.wikimedia.org/wikipedia/en/thumb/1/1c/IIT_Kharagpur_Logo.svg/1200px-IIT_Kharagpur_Logo.svg.png'
+// Put the official logo at public/kgp-logo.png. Until it exists (or if it
+// fails to load) a built-in KGP badge is shown instead of a broken image.
+const IIT_KGP_LOGO_URL = '/kgp-logo.png'
+
+function KgpLogo() {
+  const [failed, setFailed] = useState(false)
+  if (failed) {
+    return (
+      <span
+        aria-label="IIT Kharagpur"
+        className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-blue-700 to-indigo-800 text-[11px] font-black tracking-tight text-white"
+      >
+        KGP
+      </span>
+    )
+  }
+  return (
+    <img
+      src={IIT_KGP_LOGO_URL}
+      alt="IIT Kharagpur logo"
+      onError={() => setFailed(true)}
+      className="h-full w-full object-contain"
+    />
+  )
+}
+
+// Each place card shows its own photo from public/places/<slug>.jpg
+// (e.g. "Main Building" -> /places/main-building.jpg). If a file is missing,
+// the campus background underneath shows through.
+function placePhotoUrl(name: string): string {
+  const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return `/places/${slug || 'place'}.jpg`
+}
 
 type SectionView = 'explorer' | 'wayfinding' | 'analytics' | 'settings'
 
@@ -820,7 +851,7 @@ async function handleGoogleLogin(credential: string) {
         </div>
       )}
       {/* TOP COMMAND HEADER */}
-      <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-6 backdrop-blur-xl">
+      <header className="relative z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-6 backdrop-blur-xl">
         <div className="brand-area flex items-center gap-6">
           <button
             type="button"
@@ -833,7 +864,7 @@ async function handleGoogleLogin(credential: string) {
           </button>
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-white p-1 shadow-md shadow-blue-950/10">
-              <img src={IIT_KGP_LOGO_URL} alt="IIT Kharagpur logo" className="h-full w-full object-contain" />
+              <KgpLogo />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -1030,65 +1061,6 @@ async function handleGoogleLogin(credential: string) {
                 )
               })}
             </div>
-
-            {/* PLACE FOLDERS TREE */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between px-2.5 pb-1">
-                <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase">
-                  Place Folders ({placeFolders.length})
-                </span>
-                <button
-                  onClick={() => {
-                    navigate('/')
-                    setSection('explorer')
-                    setActivePlaceName(null)
-                    setInspectedCameraId(null)
-                    setMobileSidebarOpen(false)
-                  }}
-                  className="text-[10px] font-bold text-blue-600 hover:underline"
-                >
-                  View All
-                </button>
-              </div>
-
-              <div className="max-h-60 space-y-1 overflow-y-auto pr-1">
-                {placeFolders.map((folder) => {
-                  const isOpen =
-                    section === 'explorer' && activePlaceName === folder.name
-                  const FolderIcon = isOpen ? FolderOpen : Folder
-                  return (
-                    <button
-                      key={folder.name}
-                      onClick={() => {
-                        navigate(`/?place=${encodeURIComponent(folder.name)}`)
-                        setSection('explorer')
-                        setActivePlaceName(folder.name)
-                        setInspectedCameraId(null)
-                        setMobileSidebarOpen(false)
-                      }}
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs font-bold transition ${
-                        isOpen
-                          ? 'border border-blue-200 bg-blue-50/90 text-blue-700'
-                          : 'text-slate-600 hover:bg-slate-100/70 hover:text-slate-900'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        <FolderIcon
-                          size={15}
-                          className={
-                            isOpen ? 'text-blue-600' : 'text-amber-500'
-                          }
-                        />
-                        <span className="truncate">{folder.name}</span>
-                      </span>
-                      <span className="rounded-md bg-white px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-slate-700 shadow-2xs tabular-nums">
-                        {folder.totalPeople}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
           </div>
 
           {/* LIVE VENUE RADAR WIDGET */}
@@ -1169,6 +1141,7 @@ async function handleGoogleLogin(credential: string) {
                         <button
                           key={folder.name}
                           onClick={() => setActivePlaceName(folder.name)}
+                          style={{ '--place-photo': `url("${placePhotoUrl(folder.name)}")` } as React.CSSProperties}
                           className="place-card group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-5 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-md"
                         >
                           <div>

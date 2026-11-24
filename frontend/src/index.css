@@ -97,7 +97,8 @@ select:focus-visible {
 
 .place-card {
   background-image:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.93), rgba(255, 255, 255, 0.76)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.6)),
+    var(--place-photo, none),
     url("https://upload.wikimedia.org/wikipedia/commons/1/1a/Main_Building_-_Indian_Institute_of_Technology_-_Kharagpur_-_West_Midnapore_2013-01-26_3688.JPG");
   background-position: center;
   background-size: cover;
