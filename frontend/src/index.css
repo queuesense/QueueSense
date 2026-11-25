@@ -81,31 +81,65 @@ select:focus-visible {
 }
 
 .place-card {
-  background-image:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.56) 30%, rgba(255, 255, 255, 0.64) 100%),
-    var(--place-photo, none),
-    url("https://upload.wikimedia.org/wikipedia/commons/1/1a/Main_Building_-_Indian_Institute_of_Technology_-_Kharagpur_-_West_Midnapore_2013-01-26_3688.JPG");
-  background-position: center;
-  background-size: cover;
+  position: relative;
+  overflow: hidden;
   min-height: 15.5rem;
+  background-color: #e2e8f0;
 }
 
 .gate-card {
-  background-image:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.74) 100%),
-    var(--place-photo, none);
-  background-position: center;
-  background-size: cover;
+  position: relative;
+  overflow: hidden;
+  background-color: #e2e8f0;
 }
+
+/* The photo itself. Zoom and position come from --pz / --px / --py so the
+   admin can frame it; --wash sets how strong the readable overlay is. */
+.photo-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: var(--photo-img, none);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: var(--px, 50%) var(--py, 50%);
+  transform: var(--ptf, none);
+  transform-origin: var(--px, 50%) var(--py, 50%);
+}
+
+.photo-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--wash, 1);
+}
+
+.photo-wash.place {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.56) 30%, rgba(255, 255, 255, 0.64) 100%);
+}
+
+.photo-wash.gate {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.74) 100%);
+}
+
+.photo-wash.gate-off {
+  background: linear-gradient(180deg, rgba(2, 6, 23, 0.55) 0%, rgba(2, 6, 23, 0.78) 100%);
+}
+
+.place-card > :not(.photo-layer):not(.photo-wash),
+.gate-card > :not(.photo-layer):not(.photo-wash) {
+  position: relative;
+  z-index: 2;
+}
+
 
 .gate-card .bg-gradient-to-b {
   background-image: none;
 }
 
 .gate-card-offline {
-  background-image:
-    linear-gradient(180deg, rgba(2, 6, 23, 0.55) 0%, rgba(2, 6, 23, 0.78) 100%),
-    var(--place-photo, none);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
