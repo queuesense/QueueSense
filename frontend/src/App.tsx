@@ -180,6 +180,8 @@ export default function App() {
   const [isNavigating, setIsNavigating] = useState(false)
   const [loginError, setLoginError] = useState<string>('')
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
+  const accountMenuRef = useRef<HTMLDivElement | null>(null)
+  const [settingsTab, setSettingsTab] = useState<'google' | 'gates'>('google')
 
   // Per-camera video hiding when Admin is logged in
   const [hiddenVideoIds, setHiddenVideoIds] = useState<Set<string>>(new Set())
@@ -722,6 +724,25 @@ async function handleGoogleLogin(credential: string) {
     return nodes
   }, [dbCameras, phoneSessions])
 
+  // Close the account menu when the user clicks anywhere else (or presses Esc)
+  useEffect(() => {
+    if (!showAccountMenu) return
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (!accountMenuRef.current?.contains(e.target as Node)) setShowAccountMenu(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowAccountMenu(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [showAccountMenu])
+
   // Group into Place Folders
   const placeFolders = useMemo<PlaceFolder[]>(() => {
     const groups = new Map<string, CameraNode[]>()
@@ -739,7 +760,10 @@ async function handleGoogleLogin(credential: string) {
       const totalCapacity = cams.reduce((acc, c) => acc + c.capacity, 0)
       return {
         name,
-        cameras: cams,
+        cameras: [...cams].sort(
+          (a, b) =>
+            Number(b.status === 'Online') - Number(a.status === 'Online'),
+        ),
         onlineCount: onlineCams.length,
         totalPeople,
         totalCapacity,
@@ -897,66 +921,8 @@ async function handleGoogleLogin(credential: string) {
 
         {/* RIGHT CONTROLS */}
         <div className="header-actions flex items-center gap-2.5">
-          {canOperate ? (
-            <>
-              <button
-                onClick={() => setShowPairModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100"
-              >
-                <Smartphone size={14} />
-                Pair Sensor Node
-              </button>
-
-              <button
-                onClick={() => setShowSignOutConfirm(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
-              >
-                <LogOut size={14} className="text-emerald-600" />
-                Sign out
-              </button>
-            </>
-          ) : isAuthenticated ? (
-            <button
-              onClick={() => setShowSignOutConfirm(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-            >
-              <LogOut size={14} /> Signed in (Logout)
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                setLoginError('')
-                setShowLoginModal(true)
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-slate-800"
-            >
-              <UserCheck size={14} />
-              Sign in
-            </button>
-          )}
-
-          {isAuthenticated && (
-            <div className="relative">
-              <button type="button" onClick={() => setShowAccountMenu((open) => !open)} aria-expanded={showAccountMenu} className="google-account flex min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-left hover:border-blue-200 hover:bg-blue-50/40">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#4285f4] via-[#ea4335] to-[#34a853] text-[11px] font-extrabold text-white">G</span>
-                <span className="min-w-0 leading-tight">
-                  <span className="block max-w-32 truncate text-[11px] font-bold text-slate-700">{userEmail}</span>
-                  <span className="block text-[10px] font-extrabold uppercase tracking-wide text-blue-600">{userRole}</span>
-                </span>
-              </button>
-              {showAccountMenu && (
-                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                  <p className="px-2 py-1.5 text-[10px] font-extrabold tracking-wide text-slate-400 uppercase">Signed in as {userRole}</p>
-                  {canOperate && <button onClick={() => { setShowPairModal(true); setShowAccountMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100 md:hidden"><Smartphone size={14} /> Pair sensor node</button>}
-                  {isAdmin && <button onClick={() => { navigateTo('settings'); setShowAccountMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"><Settings size={14} /> Account settings</button>}
-                  <button onClick={() => { setShowSignOutConfirm(true); setShowAccountMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-rose-700 hover:bg-rose-50"><LogOut size={14} /> Sign out</button>
-                </div>
-              )}
-            </div>
-          )}
-
           <div
-            className={`hidden items-center gap-2 rounded-xl border px-3 py-2 font-mono text-[11px] font-bold sm:inline-flex ${
+            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-mono text-[11px] font-bold ${
               connected
                 ? 'border-emerald-200 bg-emerald-50/70 text-emerald-800'
                 : 'border-rose-200 bg-rose-50 text-rose-800'
@@ -974,6 +940,58 @@ async function handleGoogleLogin(credential: string) {
                   second: '2-digit',
                 })
               : 'OFFLINE'}
+          </div>
+
+          <div className="relative" ref={accountMenuRef}>
+            <button
+              type="button"
+              title={isAuthenticated ? 'Account' : 'Sign in'}
+              aria-label={isAuthenticated ? 'Account menu' : 'Sign in with Google'}
+              aria-expanded={showAccountMenu}
+              onClick={() => {
+                if (!isAuthenticated) {
+                  setLoginError('')
+                  setShowLoginModal(true)
+                  return
+                }
+                setShowAccountMenu((open) => !open)
+              }}
+              className="google-account flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#4285f4] via-[#ea4335] to-[#34a853] text-sm font-extrabold text-white shadow-md ring-2 ring-white transition hover:scale-105"
+            >
+              G
+            </button>
+            {isAuthenticated && showAccountMenu && (
+              <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                <div className="px-2.5 py-2">
+                  <p className="text-[10px] font-extrabold tracking-wide text-slate-400 uppercase">Role</p>
+                  <p className="text-sm font-extrabold text-blue-600 capitalize">{userRole}</p>
+                  <p className="truncate text-[11px] font-medium text-slate-500">{userEmail}</p>
+                </div>
+                <div className="my-1 border-t border-slate-100" />
+                {canOperate && (
+                  <button
+                    onClick={() => { setShowPairModal(true); setShowAccountMenu(false) }}
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"
+                  >
+                    <Smartphone size={14} /> Pair sensor
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    onClick={() => { navigateTo('settings'); setShowAccountMenu(false) }}
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"
+                  >
+                    <Settings size={14} /> Admin setting
+                  </button>
+                )}
+                <button
+                  onClick={() => { setShowSignOutConfirm(true); setShowAccountMenu(false) }}
+                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-rose-700 hover:bg-rose-50"
+                >
+                  <LogOut size={14} /> Sign out
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -1100,7 +1118,7 @@ async function handleGoogleLogin(credential: string) {
               {/* LEVEL 2: INSIDE A PLACE FOLDER (GRID VIEW OR 2D FLOORPLAN VIEW) */}
               {activePlaceName && currentPlaceFolder && !inspectedCamera && (
                 <>
-                  <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-2xs">
+                  <div className="place-bar mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/50 bg-white/20 px-4 py-3 backdrop-blur-md">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setActivePlaceName(null)}
@@ -1164,18 +1182,15 @@ async function handleGoogleLogin(credential: string) {
 
                   {/* SUB-VIEW A: 2D ARCHITECTURAL FLOORPLAN SCHEMATIC */}
                   {placeViewMode === 'floorplan' ? (
-                    <div className="relative flex flex-1 flex-col justify-between overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-xs">
-                      {/* Architectural Blueprint Grid Background */}
-                      <div
-                        className="pointer-events-none absolute inset-0 opacity-45"
-                        style={{
-                          backgroundImage:
-                            'radial-gradient(#94a3b8 1px, transparent 1px), linear-gradient(to right, #f1f5f9 1px, transparent 1px), linear-gradient(to bottom, #f1f5f9 1px, transparent 1px)',
-                          backgroundSize: '24px 24px, 48px 48px, 48px 48px',
-                        }}
-                      />
-
-                      <div className="relative z-10 flex items-center justify-between">
+                    <div
+                      className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-3xl border border-white/50 bg-white/70 p-4 backdrop-blur-md sm:p-6"
+                      style={{
+                        backgroundImage:
+                          'radial-gradient(rgba(148,163,184,0.55) 1px, transparent 1px), linear-gradient(to right, rgba(226,232,240,0.6) 1px, transparent 1px), linear-gradient(to bottom, rgba(226,232,240,0.6) 1px, transparent 1px)',
+                        backgroundSize: '24px 24px, 48px 48px, 48px 48px',
+                      }}
+                    >
+                      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <span className="rounded-full bg-blue-50 px-3 py-1 font-mono text-[10px] font-extrabold text-blue-700 uppercase">
                             LIVE SPATIAL SCHEMATIC · {currentPlaceFolder.name}
@@ -1185,7 +1200,7 @@ async function handleGoogleLogin(credential: string) {
                           </h2>
                         </div>
 
-                        <div className="flex items-center gap-3 text-xs font-bold">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold">
                           <span className="flex items-center gap-1.5 text-emerald-700">
                             <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
                             Fast (&lt;40%)
@@ -1202,7 +1217,7 @@ async function handleGoogleLogin(credential: string) {
                       </div>
 
                       {/* CENTRAL ARCHITECTURAL CONCOURSE DIAGRAM */}
-                      <div className="relative z-10 my-4 flex flex-1 flex-col justify-between rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50/70 p-6">
+                      <div className="relative z-10 flex flex-1 flex-col justify-between gap-5 rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50/60 p-4 sm:p-6">
                         <div className="mx-auto rounded-xl border border-slate-200 bg-white px-6 py-2 text-center shadow-2xs">
                           <span className="font-mono text-[10px] font-extrabold tracking-widest text-slate-400 uppercase">
                             VISITOR ARRIVAL PLAZA
@@ -1210,13 +1225,15 @@ async function handleGoogleLogin(credential: string) {
                         </div>
 
                         {/* GATE PINS PLOTTED ACROSS THE FLOORPLAN */}
-                        <div className="my-auto grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="my-auto grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                           {currentPlaceFolder.cameras.map((cam) => {
                             const isBest =
                               currentPlaceFolder.bestCamera?.id === cam.id &&
                               cam.status === 'Online'
-                            const colorRing =
-                              cam.occupancyPct >= 75
+                            const isOffline = cam.status === 'Offline'
+                            const colorRing = isOffline
+                              ? 'border-slate-300 bg-slate-100/90 text-slate-500'
+                              : cam.occupancyPct >= 75
                                 ? 'border-rose-400 bg-rose-50/90 text-rose-900'
                                 : cam.occupancyPct >= 40
                                   ? 'border-amber-400 bg-amber-50/90 text-amber-900'
@@ -1248,7 +1265,7 @@ async function handleGoogleLogin(credential: string) {
                                       {cam.name}
                                     </h3>
                                     <p className="text-xs opacity-75">
-                                      ~{cam.waitMinutes} min wait
+                                      {isOffline ? 'Sensor offline' : `~${cam.waitMinutes} min wait`}
                                     </p>
                                   </div>
                                   <div className="text-right">
@@ -1262,7 +1279,7 @@ async function handleGoogleLogin(credential: string) {
                                 </div>
 
                                 <div className="flex items-center justify-between border-t border-black/10 pt-2 text-[11px] font-bold">
-                                  <span>Load: {cam.occupancyPct}%</span>
+                                  <span>{isOffline ? 'No live data' : `Load: ${cam.occupancyPct}%`}</span>
                                   <span className="underline">
                                     Inspect Node →
                                   </span>
@@ -1543,7 +1560,7 @@ async function handleGoogleLogin(credential: string) {
               {/* LEVEL 3: SINGLE GATE DETAIL VIEW + INTERACTIVE ROI DRAWING */}
               {inspectedCamera && (
                 <div className="flex h-full flex-col overflow-hidden">
-                  <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-2xs">
+                  <div className="place-bar mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/50 bg-white/20 px-4 py-3 backdrop-blur-md">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => {
@@ -2106,8 +2123,36 @@ async function handleGoogleLogin(credential: string) {
               VIEW 4: ADMIN SETTINGS & STRONG PASSWORD CHANGER
              ========================================================= */}
           {section === 'settings' && isAdmin && (
-            <div className="grid h-full grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[1.05fr_1.35fr]">
-              <div className="space-y-4 overflow-y-auto pr-1">
+            <div className="flex h-full flex-col gap-4 overflow-hidden">
+              <div className="flex shrink-0 flex-wrap items-center gap-3">
+                <button
+                  onClick={() => {
+                    navigateTo('explorer')
+                    setActivePlaceName(null)
+                    setInspectedCameraId(null)
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/60 bg-white/70 px-3.5 py-2 text-xs font-bold text-slate-800 shadow-2xs backdrop-blur hover:bg-white"
+                >
+                  <ArrowLeft size={14} /> Back to Home
+                </button>
+                <div className="inline-flex rounded-xl border border-white/60 bg-white/50 p-1 backdrop-blur">
+                  {([['google', 'Google Accounts'], ['gates', 'Gates']] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setSettingsTab(key)}
+                      className={`rounded-lg px-4 py-1.5 text-xs font-extrabold transition ${
+                        settingsTab === key ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {settingsTab === 'google' && (
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className="max-w-3xl space-y-4">
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
                   <div className="flex items-center gap-2">
                     <UserCheck size={16} className="text-blue-600" />
@@ -2125,7 +2170,7 @@ async function handleGoogleLogin(credential: string) {
                       className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-blue-600 focus:bg-white"
                     />
                   </div>
-                  <div className="mt-3 max-h-32 divide-y divide-slate-100 overflow-y-auto text-xs">
+                  <div className="mt-3 max-h-[55vh] divide-y divide-slate-100 overflow-y-auto text-xs">
                     {visibleUsers.map((user) => {
                       const isPermanentAdmin = user.email.toLowerCase() === IMMUTABLE_ADMIN_EMAIL
                       const isCurrentAdmin = user.email.toLowerCase() === userEmail.toLowerCase()
@@ -2135,6 +2180,13 @@ async function handleGoogleLogin(credential: string) {
                   </div>
                 </div>
 
+                  </div>
+                </div>
+              )}
+
+              {settingsTab === 'gates' && (
+            <div className="grid h-full grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[1.05fr_1.35fr]">
+              <div className="space-y-4 overflow-y-auto pr-1">
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xs">
                   <h2 className="text-base font-extrabold text-slate-900">
                     Add Gate to Place Folder
@@ -2267,6 +2319,8 @@ async function handleGoogleLogin(credential: string) {
                   })}
                 </div>
               </div>
+            </div>
+              )}
             </div>
           )}
         </main>
