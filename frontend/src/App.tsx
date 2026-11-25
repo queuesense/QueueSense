@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDot,
+  CircleUserRound,
   Clock,
   Copy,
   Crop,
@@ -288,6 +289,21 @@ function PhotoEditor({
   const [y, setY] = useState(initial?.y ?? 50)
   const [wash, setWash] = useState(initial?.wash ?? 1)
   const [error, setError] = useState('')
+  const previewRef = useRef<HTMLDivElement | null>(null)
+  const dragRef = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    const el = previewRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      setZoom((z) => Math.min(3, Math.max(1, Math.round((z - e.deltaY * 0.002) * 100) / 100)))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const clamp = (v: number) => Math.min(100, Math.max(0, v))
 
   async function pick(file: File | undefined) {
     if (!file) return
@@ -329,8 +345,24 @@ function PhotoEditor({
         </div>
 
         <div
-          style={photoVars({ src, zoom, x, y, wash }, fallbackUrls)}
-          className="relative mt-4 flex aspect-[16/10] flex-col justify-end overflow-hidden rounded-2xl bg-slate-200 p-4 ring-1 ring-slate-200"
+          ref={previewRef}
+          style={{ ...photoVars({ src, zoom, x, y, wash }, fallbackUrls), touchAction: 'none' }}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId)
+            dragRef.current = { x: e.clientX, y: e.clientY }
+          }}
+          onPointerMove={(e) => {
+            const d = dragRef.current
+            if (!d) return
+            const rect = e.currentTarget.getBoundingClientRect()
+            setX((v) => clamp(v - ((e.clientX - d.x) / rect.width) * 100))
+            setY((v) => clamp(v - ((e.clientY - d.y) / rect.height) * 100))
+            dragRef.current = { x: e.clientX, y: e.clientY }
+          }}
+          onPointerUp={() => {
+            dragRef.current = null
+          }}
+          className="relative mt-4 flex aspect-[16/9] cursor-grab flex-col justify-end overflow-hidden rounded-2xl bg-slate-200 p-4 ring-1 ring-slate-200 active:cursor-grabbing"
         >
           <PhotoLayers variant="place" />
           <div className="relative z-[2]">
@@ -338,6 +370,9 @@ function PhotoEditor({
             <p className="text-xs font-bold text-slate-700">Live preview</p>
           </div>
         </div>
+        <p className="mt-1.5 text-center text-[11px] font-medium text-slate-500">
+          Drag the photo to move it. Scroll or use the slider to zoom.
+        </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-700">
@@ -365,8 +400,8 @@ function PhotoEditor({
 
         <div className="mt-4 space-y-3">
           <RangeRow label="Zoom" value={zoom} min={1} max={3} step={0.05} display={`${Math.round(zoom * 100)}%`} onChange={setZoom} />
-          <RangeRow label="Move left / right" value={x} min={0} max={100} step={1} display={`${x}%`} onChange={setX} />
-          <RangeRow label="Move up / down" value={y} min={0} max={100} step={1} display={`${y}%`} onChange={setY} />
+          <RangeRow label="Move left / right" value={x} min={0} max={100} step={1} display={`${Math.round(x)}%`} onChange={setX} />
+          <RangeRow label="Move up / down" value={y} min={0} max={100} step={1} display={`${Math.round(y)}%`} onChange={setY} />
           <RangeRow label="Overlay (text background)" value={wash} min={0} max={1} step={0.05} display={`${Math.round(wash * 100)}%`} onChange={setWash} />
         </div>
 
@@ -622,6 +657,42 @@ export default function App() {
     if (nextSection !== 'explorer') setInspectedCameraId(null)
   }, [location.search])
 
+
+  // A session restored from this device has no Google credential, so ask
+  // Google once (silently, no popup of ours) for the account's picture.
+  async function fetchProfilePictureSilently(email: string) {
+    try {
+      const clientId = window.__QUEUE_SENSE_CONFIG__?.googleClientId || import.meta.env.VITE_GOOGLE_CLIENT_ID
+      if (!clientId) return
+      const triedKey = `queuesense_picture_tried:${email}`
+      if (window.localStorage.getItem(triedKey)) return
+      window.localStorage.setItem(triedKey, '1')
+      await loadGoogleScript()
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        auto_select: true,
+        cancel_on_tap_outside: false,
+        callback: (response: { credential: string }) => {
+          const claims = decodeJwt(response.credential)
+          const gEmail = typeof claims.email === 'string' ? claims.email : ''
+          const picture = typeof claims.picture === 'string' ? claims.picture : ''
+          if (gEmail.toLowerCase() !== email.toLowerCase()) return
+          const saved = { email, picture }
+          window.localStorage.setItem(PROFILE_KEY, JSON.stringify(saved))
+          setProfile(saved)
+        },
+      })
+      window.google.accounts.id.prompt()
+    } catch {
+      /* keep the initial-letter avatar */
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated || !userEmail || profile.email === userEmail) return
+    void fetchProfilePictureSilently(userEmail)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, userEmail, profile.email])
 
   // Re-use the Google account this device signed in with before. Nothing is
   // shown to the person: Google signs in silently when it can, otherwise the
@@ -1353,8 +1424,8 @@ async function handleGoogleLogin(credential: string) {
                   size={40}
                 />
               ) : (
-                <span className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#4285f4] via-[#ea4335] to-[#34a853] text-sm font-extrabold text-white">
-                  G
+                <span className="flex h-full w-full items-center justify-center bg-white text-slate-500">
+                  <CircleUserRound size={26} strokeWidth={1.6} />
                 </span>
               )}
             </button>
@@ -1584,6 +1655,21 @@ async function handleGoogleLogin(credential: string) {
 
                     {/* SWITCH BETWEEN CARD GRID AND 2D ARCHITECTURAL FLOORPLAN */}
                     <div className="flex items-center gap-2">
+                      {isAdmin && (
+                        <button
+                          onClick={() =>
+                            setPhotoEditor({
+                              key: placeSlug(currentPlaceFolder.name),
+                              title: currentPlaceFolder.name,
+                              subtitle: 'Place photo shown on the home card and behind its gate cards.',
+                              placeName: currentPlaceFolder.name,
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/50 bg-white/70 px-3 py-2 text-xs font-bold text-slate-800 shadow-2xs backdrop-blur hover:bg-white"
+                        >
+                          <Camera size={14} /> Edit place photo
+                        </button>
+                      )}
                       <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1">
                         <button
                           onClick={() => setPlaceViewMode('grid')}
@@ -1787,9 +1873,9 @@ async function handleGoogleLogin(credential: string) {
                                       placeName: currentPlaceFolder.name,
                                     })
                                   }
-                                  className="rounded-xl border border-white/40 bg-white/80 p-1.5 text-slate-700 shadow-2xs backdrop-blur hover:bg-white"
+                                  className="photo-edit-btn inline-flex items-center gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-bold shadow-2xs backdrop-blur"
                                 >
-                                  <Camera size={14} />
+                                  <Camera size={13} /> Photo
                                 </button>
                               )}
                               {isAdmin ? (

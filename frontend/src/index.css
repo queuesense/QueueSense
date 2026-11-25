@@ -222,3 +222,12 @@ select:focus-visible {
 
 .place-card .text-slate-400,
 .place-card .text-slate-500 { color: #1e293b; font-weight: 700; }
+
+.gate-card .photo-edit-btn.photo-edit-btn {
+  background-color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #1e293b;
+}
+.gate-card .photo-edit-btn.photo-edit-btn:hover {
+  background-color: #fff;
+}
