@@ -100,6 +100,24 @@ const IMMUTABLE_ADMIN_EMAIL = 'queuesense07@gmail.com'
 // fails to load) a built-in KGP badge is shown instead of a broken image.
 const IIT_KGP_LOGO_URL = '/kgp-logo.png'
 
+const GOOGLE_REMEMBER_KEY = 'queuesense_google_remembered'
+
+function loadGoogleScript(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) return resolve()
+    const existing = document.getElementById('google-gsi-client') as HTMLScriptElement | null
+    const script = existing ?? document.createElement('script')
+    if (!existing) {
+      script.id = 'google-gsi-client'
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      document.head.appendChild(script)
+    }
+    script.addEventListener('load', () => resolve(), { once: true })
+    script.addEventListener('error', () => reject(new Error('Google script failed')), { once: true })
+  })
+}
+
 function KgpLogo() {
   const [failed, setFailed] = useState(false)
   if (failed) {
@@ -276,6 +294,27 @@ export default function App() {
   }, [location.search])
 
 
+  // Re-use the Google account this device signed in with before. Nothing is
+  // shown to the person: Google signs in silently when it can, otherwise the
+  // visitor simply stays signed out until they tap the "G" button.
+  async function silentGoogleSignIn() {
+    try {
+      if (window.localStorage.getItem(GOOGLE_REMEMBER_KEY) !== '1') return
+      const clientId = window.__QUEUE_SENSE_CONFIG__?.googleClientId || import.meta.env.VITE_GOOGLE_CLIENT_ID
+      if (!clientId) return
+      await loadGoogleScript()
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        auto_select: true,
+        cancel_on_tap_outside: false,
+        callback: (response: { credential: string }) => void handleGoogleLogin(response.credential),
+      })
+      window.google.accounts.id.prompt()
+    } catch {
+      /* stay signed out */
+    }
+  }
+
 async function handleGoogleLogin(credential: string) {
   setLoginError('')
   setIsSigningIn(true)
@@ -290,6 +329,11 @@ async function handleGoogleLogin(credential: string) {
     setUserEmail(user.email)
     setIsAuthenticated(true)
     setShowLoginModal(false)
+    try {
+      window.localStorage.setItem(GOOGLE_REMEMBER_KEY, '1')
+    } catch {
+      /* ignore */
+    }
 
     showToast('Signed in successfully')
 
@@ -356,7 +400,7 @@ async function handleGoogleLogin(credential: string) {
       })
       .catch(() => {
         clearAdminToken()
-        setShowLoginModal(true)
+        void silentGoogleSignIn()
       })
   }, [])
 
@@ -373,7 +417,10 @@ async function handleGoogleLogin(credential: string) {
       } catch {
         clearAdminToken()
         setIsAuthenticated(false)
-        setShowLoginModal(true)
+        setIsAdmin(false)
+        setUserRole('viewer')
+        setUserEmail('')
+        void silentGoogleSignIn()
       }
     }
     const timer = window.setInterval(() => void refreshSession(), 10_000)
@@ -849,7 +896,12 @@ async function handleGoogleLogin(credential: string) {
     setSummary(null)
     setHistoryItems([])
     navigate('/', { replace: true })
-    setShowLoginModal(true)
+    try {
+      window.localStorage.removeItem(GOOGLE_REMEMBER_KEY)
+      window.google?.accounts?.id?.disableAutoSelect?.()
+    } catch {
+      /* ignore */
+    }
     showToast('Signed out')
   }
 
@@ -864,7 +916,7 @@ async function handleGoogleLogin(credential: string) {
         </div>
       )}
       {/* TOP COMMAND HEADER */}
-      <header className="relative z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/85 px-6 backdrop-blur-xl">
+      <header className="relative z-30 flex h-16 shrink-0 items-center justify-between bg-white/70 px-6 backdrop-blur-xl">
         <div className="brand-area flex items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="kgp-logo-wrap flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-white p-0.5 shadow-md shadow-blue-950/10">
@@ -1035,12 +1087,34 @@ async function handleGoogleLogin(credential: string) {
                       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
                         <Folder size={28} />
                       </div>
-                      <h2 className="mt-3 text-base font-extrabold text-slate-900">
-                        No Place Folders Active Yet
-                      </h2>
-                      <p className="mt-1 max-w-md text-xs text-slate-500">
-                        Activate a sensor node to populate the directory.
-                      </p>
+                      {isAuthenticated ? (
+                        <>
+                          <h2 className="mt-3 text-base font-extrabold text-slate-900">
+                            No Place Folders Active Yet
+                          </h2>
+                          <p className="mt-1 max-w-md text-xs text-slate-500">
+                            Activate a sensor node to populate the directory.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <h2 className="mt-3 text-base font-extrabold text-slate-900">
+                            Sign in to see live campus crowd
+                          </h2>
+                          <p className="mt-1 max-w-md text-xs text-slate-500">
+                            Use the Google account you use for IIT Kharagpur. This device will remember it next time.
+                          </p>
+                          <button
+                            onClick={() => {
+                              setLoginError('')
+                              setShowLoginModal(true)
+                            }}
+                            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700"
+                          >
+                            <UserCheck size={14} /> Continue with Google
+                          </button>
+                        </>
+                      )}
                     </div>
                   ) : (
                     <div className="grid flex-1 auto-rows-max grid-cols-1 gap-5 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
@@ -1118,7 +1192,7 @@ async function handleGoogleLogin(credential: string) {
               {/* LEVEL 2: INSIDE A PLACE FOLDER (GRID VIEW OR 2D FLOORPLAN VIEW) */}
               {activePlaceName && currentPlaceFolder && !inspectedCamera && (
                 <>
-                  <div className="place-bar mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/50 bg-white/20 px-4 py-3 backdrop-blur-md">
+                  <div className="place-bar mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/20 px-4 py-3 backdrop-blur-md">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setActivePlaceName(null)}
@@ -1560,7 +1634,7 @@ async function handleGoogleLogin(credential: string) {
               {/* LEVEL 3: SINGLE GATE DETAIL VIEW + INTERACTIVE ROI DRAWING */}
               {inspectedCamera && (
                 <div className="flex h-full flex-col overflow-hidden">
-                  <div className="place-bar mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/50 bg-white/20 px-4 py-3 backdrop-blur-md">
+                  <div className="place-bar mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/20 px-4 py-3 backdrop-blur-md">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => {
