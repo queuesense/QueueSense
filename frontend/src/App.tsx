@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDot,
+  CircleUserRound,
   Clock,
   Copy,
   Crop,
@@ -101,6 +102,7 @@ const IMMUTABLE_ADMIN_EMAIL = 'queuesense07@gmail.com'
 const IIT_KGP_LOGO_URL = '/kgp-logo.png'
 
 const GOOGLE_REMEMBER_KEY = 'queuesense_google_remembered'
+const APP_BUILD = 'v7 · 25 Nov 2026'
 
 function loadGoogleScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -152,6 +154,284 @@ function placePhotoUrl(name: string): string {
 }
 
 const PLACE_PHOTOS_KEY = 'queuesense_place_photos'
+const PROFILE_KEY = 'queuesense_profile'
+const WIKI_BG =
+  'https://upload.wikimedia.org/wikipedia/commons/1/1a/Main_Building_-_Indian_Institute_of_Technology_-_Kharagpur_-_West_Midnapore_2013-01-26_3688.JPG'
+
+// A photo for a place or a gate: the picture itself (when changed from a PC)
+// plus how it is framed (zoom / position) and how strong the overlay is.
+interface PhotoEntry {
+  src?: string
+  zoom: number
+  x: number
+  y: number
+  wash: number
+}
+
+const DEFAULT_PHOTO: PhotoEntry = { zoom: 1, x: 50, y: 50, wash: 1 }
+
+function photoVars(entry: PhotoEntry | undefined, fallbacks: string[]): React.CSSProperties {
+  const e = entry ?? DEFAULT_PHOTO
+  const urls = [entry?.src, ...fallbacks].filter(Boolean) as string[]
+  return {
+    '--photo-img': urls.map((u) => `url("${u}")`).join(', '),
+    '--px': `${e.x}%`,
+    '--py': `${e.y}%`,
+    '--pz': e.zoom,
+    '--ptf': e.zoom === 1 ? 'none' : `scale(${e.zoom})`,
+    '--wash': e.wash,
+  } as React.CSSProperties
+}
+
+function PhotoLayers({ variant }: { variant: 'place' | 'gate' | 'gate-off' }) {
+  return (
+    <>
+      <span className="photo-layer" aria-hidden="true" />
+      <span className={`photo-wash ${variant}`} aria-hidden="true" />
+    </>
+  )
+}
+
+function decodeJwt(token: string): Record<string, unknown> {
+  try {
+    const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    const json = decodeURIComponent(
+      atob(part)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(''),
+    )
+    return JSON.parse(json)
+  } catch {
+    return {}
+  }
+}
+
+function UserAvatar({ picture, email, size = 40 }: { picture?: string; email: string; size?: number }) {
+  const [broken, setBroken] = useState(false)
+  const letter = (email || '?').trim().charAt(0).toUpperCase()
+  const hue = Array.from(email || 'x').reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7)
+  if (picture && !broken) {
+    return (
+      <img
+        src={picture}
+        alt=""
+        referrerPolicy="no-referrer"
+        onError={() => setBroken(true)}
+        style={{ width: size, height: size }}
+        className="rounded-full object-cover"
+      />
+    )
+  }
+  return (
+    <span
+      style={{ width: size, height: size, background: `hsl(${hue} 65% 45%)`, fontSize: size * 0.42 }}
+      className="flex items-center justify-center rounded-full font-extrabold text-white"
+    >
+      {letter}
+    </span>
+  )
+}
+
+function RangeRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  display,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  display: string
+  onChange: (v: number) => void
+}) {
+  return (
+    <label className="block">
+      <span className="flex items-center justify-between text-[11px] font-extrabold text-slate-600">
+        {label}
+        <span className="font-mono text-slate-400">{display}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 w-full accent-blue-600"
+      />
+    </label>
+  )
+}
+
+function PhotoEditor({
+  title,
+  subtitle,
+  initial,
+  fallbackUrls,
+  onSave,
+  onClose,
+}: {
+  title: string
+  subtitle: string
+  initial: PhotoEntry | undefined
+  fallbackUrls: string[]
+  onSave: (entry: PhotoEntry | null) => void
+  onClose: () => void
+}) {
+  const [src, setSrc] = useState<string | undefined>(initial?.src)
+  const [zoom, setZoom] = useState(initial?.zoom ?? 1)
+  const [x, setX] = useState(initial?.x ?? 50)
+  const [y, setY] = useState(initial?.y ?? 50)
+  const [wash, setWash] = useState(initial?.wash ?? 1)
+  const [error, setError] = useState('')
+  const previewRef = useRef<HTMLDivElement | null>(null)
+  const dragRef = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    const el = previewRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      setZoom((z) => Math.min(3, Math.max(1, Math.round((z - e.deltaY * 0.002) * 100) / 100)))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const clamp = (v: number) => Math.min(100, Math.max(0, v))
+
+  async function pick(file: File | undefined) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file.')
+      return
+    }
+    try {
+      setSrc(await resizeImageFile(file))
+      setZoom(1)
+      setX(50)
+      setY(50)
+      setError('')
+    } catch {
+      setError('Could not read that image.')
+    }
+  }
+
+  return (
+    <div
+      role="presentation"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-3 backdrop-blur-xs"
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[94svh] w-full max-w-lg overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900">{title}</h2>
+            <p className="text-xs text-slate-500">{subtitle}</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div
+          ref={previewRef}
+          style={{ ...photoVars({ src, zoom, x, y, wash }, fallbackUrls), touchAction: 'none' }}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId)
+            dragRef.current = { x: e.clientX, y: e.clientY }
+          }}
+          onPointerMove={(e) => {
+            const d = dragRef.current
+            if (!d) return
+            const rect = e.currentTarget.getBoundingClientRect()
+            setX((v) => clamp(v - ((e.clientX - d.x) / rect.width) * 100))
+            setY((v) => clamp(v - ((e.clientY - d.y) / rect.height) * 100))
+            dragRef.current = { x: e.clientX, y: e.clientY }
+          }}
+          onPointerUp={() => {
+            dragRef.current = null
+          }}
+          className="relative mt-4 flex aspect-[16/9] cursor-grab flex-col justify-end overflow-hidden rounded-2xl bg-slate-200 p-4 ring-1 ring-slate-200 active:cursor-grabbing"
+        >
+          <PhotoLayers variant="place" />
+          <div className="relative z-[2]">
+            <p className="text-base font-extrabold text-slate-900">{title}</p>
+            <p className="text-xs font-bold text-slate-700">Live preview</p>
+          </div>
+        </div>
+        <p className="mt-1.5 text-center text-[11px] font-medium text-slate-500">
+          Drag the photo to move it. Scroll or use the slider to zoom.
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-700">
+            <Camera size={13} /> Choose photo from computer
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                void pick(e.target.files?.[0])
+                e.target.value = ''
+              }}
+            />
+          </label>
+          {src && (
+            <button
+              onClick={() => setSrc(undefined)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Use default photo
+            </button>
+          )}
+        </div>
+        {error && <p className="mt-2 text-xs font-bold text-rose-600">{error}</p>}
+
+        <div className="mt-4 space-y-3">
+          <RangeRow label="Zoom" value={zoom} min={1} max={3} step={0.05} display={`${Math.round(zoom * 100)}%`} onChange={setZoom} />
+          <RangeRow label="Move left / right" value={x} min={0} max={100} step={1} display={`${Math.round(x)}%`} onChange={setX} />
+          <RangeRow label="Move up / down" value={y} min={0} max={100} step={1} display={`${Math.round(y)}%`} onChange={setY} />
+          <RangeRow label="Overlay (text background)" value={wash} min={0} max={1} step={0.05} display={`${Math.round(wash * 100)}%`} onChange={setWash} />
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+          <button
+            onClick={() => onSave(null)}
+            className="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100"
+          >
+            Reset everything
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onSave({ src, zoom, x, y, wash })}
+              className="rounded-xl bg-slate-900 px-5 py-2 text-xs font-bold text-white hover:bg-slate-800"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
 
 // Shrink a photo picked from the admin's PC so it stays small enough to keep.
 function resizeImageFile(file: File, maxSide = 1280, quality = 0.82): Promise<string> {
@@ -232,46 +512,58 @@ export default function App() {
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
   const accountMenuRef = useRef<HTMLDivElement | null>(null)
   const [settingsTab, setSettingsTab] = useState<'google' | 'gates' | 'photos'>('google')
-  const [placePhotos, setPlacePhotos] = useState<Record<string, string>>(() => {
+  const [photos, setPhotos] = useState<Record<string, PhotoEntry>>(() => {
     try {
-      return JSON.parse(window.localStorage.getItem(PLACE_PHOTOS_KEY) ?? '{}')
+      const raw = JSON.parse(window.localStorage.getItem(PLACE_PHOTOS_KEY) ?? '{}') as Record<string, unknown>
+      const out: Record<string, PhotoEntry> = {}
+      for (const [k, v] of Object.entries(raw)) {
+        // older saves stored just the picture as text
+        out[k] = typeof v === 'string' ? { ...DEFAULT_PHOTO, src: v } : { ...DEFAULT_PHOTO, ...(v as Partial<PhotoEntry>) }
+      }
+      return out
     } catch {
       return {}
     }
   })
+  const [photoEditor, setPhotoEditor] = useState<{ key: string; title: string; subtitle: string; placeName: string } | null>(null)
+  const [profile, setProfile] = useState<{ email: string; picture: string }>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(PROFILE_KEY) ?? '{}')
+    } catch {
+      return { email: '', picture: '' }
+    }
+  })
 
-  const placePhotoCss = (name: string) => {
-    const custom = placePhotos[placeSlug(name)]
-    return `url("${custom ?? placePhotoUrl(name)}")`
+  // Style variables for a place card / gate card. A gate with no photo of its
+  // own simply uses its place's photo and framing.
+  function photoStyleFor(key: string, placeName: string): React.CSSProperties {
+    const placeKey = placeSlug(placeName)
+    const placeEntry = photos[placeKey]
+    const own = key === placeKey ? placeEntry : photos[key]
+    const base = own ?? (key !== placeKey ? placeEntry : undefined)
+    const src = own?.src ?? placeEntry?.src
+    return photoVars(base ? { ...base, src } : undefined, [placePhotoUrl(placeName), WIKI_BG])
   }
 
-  async function changePlacePhoto(name: string, file: File | undefined) {
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      showToast('Please choose an image file')
+  function fallbackUrlsFor(key: string, placeName: string): string[] {
+    const placeKey = placeSlug(placeName)
+    const placeSrc = key !== placeKey ? photos[placeKey]?.src : undefined
+    return [placeSrc, placePhotoUrl(placeName), WIKI_BG].filter(Boolean) as string[]
+  }
+
+  function savePhoto(key: string, entry: PhotoEntry | null) {
+    const next = { ...photos }
+    if (entry) next[key] = entry
+    else delete next[key]
+    try {
+      window.localStorage.setItem(PLACE_PHOTOS_KEY, JSON.stringify(next))
+    } catch {
+      showToast('Photo is too large to save. Try a smaller image.')
       return
     }
-    try {
-      const dataUrl = await resizeImageFile(file)
-      const next = { ...placePhotos, [placeSlug(name)]: dataUrl }
-      window.localStorage.setItem(PLACE_PHOTOS_KEY, JSON.stringify(next))
-      setPlacePhotos(next)
-      showToast(`${name} photo updated`)
-    } catch {
-      showToast('Could not save that photo. Try a smaller image.')
-    }
-  }
-
-  function resetPlacePhoto(name: string) {
-    const next = { ...placePhotos }
-    delete next[placeSlug(name)]
-    try {
-      window.localStorage.setItem(PLACE_PHOTOS_KEY, JSON.stringify(next))
-    } catch {
-      /* ignore */
-    }
-    setPlacePhotos(next)
-    showToast(`${name} photo reset`)
+    setPhotos(next)
+    setPhotoEditor(null)
+    showToast(entry ? 'Photo saved' : 'Photo reset')
   }
 
   // Per-camera video hiding when Admin is logged in
@@ -367,6 +659,42 @@ export default function App() {
   }, [location.search])
 
 
+  // A session restored from this device has no Google credential, so ask
+  // Google once (silently, no popup of ours) for the account's picture.
+  async function fetchProfilePictureSilently(email: string) {
+    try {
+      const clientId = window.__QUEUE_SENSE_CONFIG__?.googleClientId || import.meta.env.VITE_GOOGLE_CLIENT_ID
+      if (!clientId) return
+      const triedKey = `queuesense_picture_tried:${email}`
+      if (window.localStorage.getItem(triedKey)) return
+      window.localStorage.setItem(triedKey, '1')
+      await loadGoogleScript()
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        auto_select: true,
+        cancel_on_tap_outside: false,
+        callback: (response: { credential: string }) => {
+          const claims = decodeJwt(response.credential)
+          const gEmail = typeof claims.email === 'string' ? claims.email : ''
+          const picture = typeof claims.picture === 'string' ? claims.picture : ''
+          if (gEmail.toLowerCase() !== email.toLowerCase()) return
+          const saved = { email, picture }
+          window.localStorage.setItem(PROFILE_KEY, JSON.stringify(saved))
+          setProfile(saved)
+        },
+      })
+      window.google.accounts.id.prompt()
+    } catch {
+      /* keep the initial-letter avatar */
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated || !userEmail || profile.email === userEmail) return
+    void fetchProfilePictureSilently(userEmail)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, userEmail, profile.email])
+
   // Re-use the Google account this device signed in with before. Nothing is
   // shown to the person: Google signs in silently when it can, otherwise the
   // visitor simply stays signed out until they tap the "G" button.
@@ -402,6 +730,15 @@ async function handleGoogleLogin(credential: string) {
     setUserEmail(user.email)
     setIsAuthenticated(true)
     setShowLoginModal(false)
+    try {
+      const claims = decodeJwt(credential)
+      const picture = typeof claims.picture === 'string' ? claims.picture : ''
+      const saved = { email: user.email, picture }
+      window.localStorage.setItem(PROFILE_KEY, JSON.stringify(saved))
+      setProfile(saved)
+    } catch {
+      /* ignore */
+    }
     try {
       window.localStorage.setItem(GOOGLE_REMEMBER_KEY, '1')
     } catch {
@@ -971,6 +1308,8 @@ async function handleGoogleLogin(credential: string) {
     navigate('/', { replace: true })
     try {
       window.localStorage.removeItem(GOOGLE_REMEMBER_KEY)
+      window.localStorage.removeItem(PROFILE_KEY)
+      setProfile({ email: '', picture: '' })
       window.google?.accounts?.id?.disableAutoSelect?.()
     } catch {
       /* ignore */
@@ -1065,7 +1404,7 @@ async function handleGoogleLogin(credential: string) {
           <div className="relative" ref={accountMenuRef}>
             <button
               type="button"
-              title={isAuthenticated ? 'Account' : 'Sign in'}
+              title={isAuthenticated ? userEmail : 'Sign in'}
               aria-label={isAuthenticated ? 'Account menu' : 'Sign in with Google'}
               aria-expanded={showAccountMenu}
               onClick={() => {
@@ -1076,40 +1415,64 @@ async function handleGoogleLogin(credential: string) {
                 }
                 setShowAccountMenu((open) => !open)
               }}
-              className="google-account flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#4285f4] via-[#ea4335] to-[#34a853] text-sm font-extrabold text-white shadow-md ring-2 ring-white transition hover:scale-105"
+              className="google-account flex h-10 w-10 items-center justify-center overflow-hidden rounded-full shadow-md ring-2 ring-white transition hover:scale-105"
             >
-              G
+              {isAuthenticated ? (
+                <UserAvatar
+                  key={profile.picture}
+                  picture={profile.email === userEmail ? profile.picture : ''}
+                  email={userEmail}
+                  size={40}
+                />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center bg-white text-slate-500">
+                  <CircleUserRound size={26} strokeWidth={1.6} />
+                </span>
+              )}
             </button>
             {isAuthenticated && showAccountMenu && (
-              <div className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                <div className="px-2.5 py-2">
-                  <p className="text-[10px] font-extrabold tracking-wide text-slate-400 uppercase">Role</p>
-                  <p className="text-sm font-extrabold text-blue-600 capitalize">{userRole}</p>
-                  <p className="truncate text-[11px] font-medium text-slate-500">{userEmail}</p>
+              <div className="absolute right-0 top-[calc(100%+0.6rem)] z-50 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
+                <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-3">
+                  <UserAvatar
+                    key={profile.picture}
+                    picture={profile.email === userEmail ? profile.picture : ''}
+                    email={userEmail}
+                    size={44}
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-bold text-slate-800">{userEmail}</p>
+                    <span className="mt-1 inline-block rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-extrabold text-blue-700 capitalize ring-1 ring-blue-100">
+                      {userRole}
+                    </span>
+                  </div>
                 </div>
-                <div className="my-1 border-t border-slate-100" />
-                {canOperate && (
+                <div className="mt-1.5">
+                  {canOperate && (
+                    <button
+                      onClick={() => { setShowPairModal(true); setShowAccountMenu(false) }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"
+                    >
+                      <Smartphone size={14} /> Pair sensor
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => { navigateTo('settings'); setShowAccountMenu(false) }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"
+                    >
+                      <Settings size={14} /> Admin setting
+                    </button>
+                  )}
                   <button
-                    onClick={() => { setShowPairModal(true); setShowAccountMenu(false) }}
-                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"
+                    onClick={() => { setShowSignOutConfirm(true); setShowAccountMenu(false) }}
+                    className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-bold text-rose-700 hover:bg-rose-50"
                   >
-                    <Smartphone size={14} /> Pair sensor
+                    <LogOut size={14} /> Sign out
                   </button>
-                )}
-                {isAdmin && (
-                  <button
-                    onClick={() => { navigateTo('settings'); setShowAccountMenu(false) }}
-                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"
-                  >
-                    <Settings size={14} /> Admin setting
-                  </button>
-                )}
-                <button
-                  onClick={() => { setShowSignOutConfirm(true); setShowAccountMenu(false) }}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-bold text-rose-700 hover:bg-rose-50"
-                >
-                  <LogOut size={14} /> Sign out
-                </button>
+                </div>
+                <p className="mt-1 border-t border-slate-100 px-3 pt-2 pb-1 text-[10px] font-semibold text-slate-400">
+                  Build {APP_BUILD}
+                </p>
               </div>
             )}
           </div>
@@ -1181,6 +1544,7 @@ async function handleGoogleLogin(credential: string) {
                           >
                             <UserCheck size={14} /> Continue with Google
                           </button>
+                          <p className="mt-4 text-[10px] font-semibold text-slate-400">Build {APP_BUILD}</p>
                         </>
                       )}
                     </div>
@@ -1190,9 +1554,10 @@ async function handleGoogleLogin(credential: string) {
                         <button
                           key={folder.name}
                           onClick={() => setActivePlaceName(folder.name)}
-                          style={{ '--place-photo': placePhotoCss(folder.name) } as React.CSSProperties}
+                          style={photoStyleFor(placeSlug(folder.name), folder.name)}
                           className="place-card group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-5 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-md"
                         >
+                          <PhotoLayers variant="place" />
                           <div>
                             <div className="flex items-start justify-between">
                               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-100 to-amber-50 text-amber-600 ring-1 ring-amber-200/60 transition group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white">
@@ -1295,6 +1660,21 @@ async function handleGoogleLogin(credential: string) {
 
                     {/* SWITCH BETWEEN CARD GRID AND 2D ARCHITECTURAL FLOORPLAN */}
                     <div className="flex items-center gap-2">
+                      {isAdmin && (
+                        <button
+                          onClick={() =>
+                            setPhotoEditor({
+                              key: placeSlug(currentPlaceFolder.name),
+                              title: currentPlaceFolder.name,
+                              subtitle: 'Place photo shown on the home card and behind its gate cards.',
+                              placeName: currentPlaceFolder.name,
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/50 bg-white/70 px-3 py-2 text-xs font-bold text-slate-800 shadow-2xs backdrop-blur hover:bg-white"
+                        >
+                          <Camera size={14} /> Edit place photo
+                        </button>
+                      )}
                       <div className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1">
                         <button
                           onClick={() => setPlaceViewMode('grid')}
@@ -1451,7 +1831,7 @@ async function handleGoogleLogin(credential: string) {
                         return (
                           <article
                             key={cam.id}
-                            style={{ '--place-photo': placePhotoCss(currentPlaceFolder.name) } as React.CSSProperties}
+                            style={photoStyleFor(`gate:${cam.id}`, currentPlaceFolder.name)}
                             className={`gate-card flex flex-col justify-between overflow-hidden rounded-3xl border shadow-xs transition ${
                               cam.status === 'Offline'
                                 ? 'gate-card-offline border-slate-950 bg-slate-950'
@@ -1460,6 +1840,7 @@ async function handleGoogleLogin(credential: string) {
                                 : 'border-emerald-300 bg-white'
                             }`}
                           >
+                            <PhotoLayers variant={cam.status === 'Offline' ? 'gate-off' : 'gate'} />
                             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                               <div className="flex items-center gap-2">
                                 <span
@@ -1484,6 +1865,24 @@ async function handleGoogleLogin(credential: string) {
                                 )}
                               </div>
 
+                              <div className="flex items-center gap-1.5">
+                              {isAdmin && (
+                                <button
+                                  title="Edit photo"
+                                  aria-label="Edit photo"
+                                  onClick={() =>
+                                    setPhotoEditor({
+                                      key: `gate:${cam.id}`,
+                                      title: `${cam.name} photo`,
+                                      subtitle: `Gate in ${currentPlaceFolder.name}. Without its own photo it uses the place photo.`,
+                                      placeName: currentPlaceFolder.name,
+                                    })
+                                  }
+                                  className="photo-edit-btn inline-flex items-center gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-bold shadow-2xs backdrop-blur"
+                                >
+                                  <Camera size={13} /> Photo
+                                </button>
+                              )}
                               {isAdmin ? (
                                 <button
                                   onClick={() =>
@@ -1512,6 +1911,7 @@ async function handleGoogleLogin(credential: string) {
                                   {cam.congestionLabel} Load
                                 </span>
                               )}
+                              </div>
                             </div>
 
                             {showVideo ? (
@@ -2469,51 +2869,87 @@ async function handleGoogleLogin(credential: string) {
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1">
                   <div className="max-w-3xl space-y-3">
                     <p className="rounded-2xl bg-white/70 px-4 py-3 text-xs font-medium text-slate-600 backdrop-blur">
-                      Pick a photo from this computer for each place. It also appears on that place&apos;s gate cards.
-                      Photos are saved in this browser.
+                      Choose a photo from this computer and adjust zoom, position and overlay for each place. A gate uses its
+                      place&apos;s photo unless you give it its own. Changes are saved in this browser.
                     </p>
                     {placeFolders.length === 0 && (
                       <p className="rounded-2xl bg-white/70 px-4 py-6 text-center text-xs text-slate-500 backdrop-blur">
                         No places yet. Add a place and gate first.
                       </p>
                     )}
-                    {placeFolders.map((folder) => (
-                      <div
-                        key={folder.name}
-                        className="flex items-center gap-4 rounded-2xl border border-white/60 bg-white/80 p-3 shadow-xs backdrop-blur"
-                      >
-                        <div
-                          className="h-20 w-32 shrink-0 rounded-xl bg-slate-200 bg-cover bg-center"
-                          style={{ backgroundImage: placePhotoCss(folder.name) }}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-extrabold text-slate-900">{folder.name}</p>
-                          <p className="text-[11px] text-slate-500">
-                            {placePhotos[placeSlug(folder.name)] ? 'Custom photo' : 'Default photo'}
-                          </p>
+                    {placeFolders.map((folder) => {
+                      const key = placeSlug(folder.name)
+                      return (
+                        <div key={folder.name} className="rounded-2xl border border-white/60 bg-white/80 p-3 shadow-xs backdrop-blur">
+                          <div className="flex items-center gap-4">
+                            <div
+                              style={photoStyleFor(key, folder.name)}
+                              className="relative h-20 w-32 shrink-0 overflow-hidden rounded-xl bg-slate-200"
+                            >
+                              <span className="photo-layer" aria-hidden="true" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-extrabold text-slate-900">{folder.name}</p>
+                              <p className="text-[11px] text-slate-500">
+                                {photos[key] ? 'Custom photo / framing' : 'Default photo'} · {folder.cameras.length}{' '}
+                                {folder.cameras.length === 1 ? 'gate' : 'gates'}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() =>
+                                setPhotoEditor({
+                                  key,
+                                  title: folder.name,
+                                  subtitle: 'Place photo shown on the home card and its gate cards.',
+                                  placeName: folder.name,
+                                })
+                              }
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-700"
+                            >
+                              <Camera size={13} /> Edit photo
+                            </button>
+                          </div>
+                          {folder.cameras.length > 0 && (
+                            <details className="mt-3 border-t border-slate-100 pt-2">
+                              <summary className="cursor-pointer text-[11px] font-extrabold text-slate-500 select-none">
+                                Gate photos
+                              </summary>
+                              <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
+                                {folder.cameras.map((cam) => (
+                                  <div key={cam.id} className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
+                                    <div
+                                      style={photoStyleFor(`gate:${cam.id}`, folder.name)}
+                                      className="relative h-9 w-14 shrink-0 overflow-hidden rounded-lg bg-slate-200"
+                                    >
+                                      <span className="photo-layer" aria-hidden="true" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-xs font-bold text-slate-800">{cam.name}</p>
+                                      <p className="text-[10px] text-slate-500">
+                                        {photos[`gate:${cam.id}`] ? 'Own photo' : 'Uses place photo'}
+                                      </p>
+                                    </div>
+                                    <button
+                                      onClick={() =>
+                                        setPhotoEditor({
+                                          key: `gate:${cam.id}`,
+                                          title: `${cam.name} photo`,
+                                          subtitle: `Gate in ${folder.name}. Without its own photo it uses the place photo.`,
+                                          placeName: folder.name,
+                                        })
+                                      }
+                                      className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-100"
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
                         </div>
-                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-700">
-                          <Camera size={13} /> Change photo
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              void changePlacePhoto(folder.name, e.target.files?.[0])
-                              e.target.value = ''
-                            }}
-                          />
-                        </label>
-                        {placePhotos[placeSlug(folder.name)] && (
-                          <button
-                            onClick={() => resetPlacePhoto(folder.name)}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                          >
-                            Reset
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -2521,6 +2957,19 @@ async function handleGoogleLogin(credential: string) {
           )}
         </main>
       </div>
+
+      {/* PHOTO EDITOR (admin) */}
+      {photoEditor && isAdmin && (
+        <PhotoEditor
+          key={photoEditor.key}
+          title={photoEditor.title}
+          subtitle={photoEditor.subtitle}
+          initial={photos[photoEditor.key]}
+          fallbackUrls={fallbackUrlsFor(photoEditor.key, photoEditor.placeName)}
+          onSave={(entry) => savePhoto(photoEditor.key, entry)}
+          onClose={() => setPhotoEditor(null)}
+        />
+      )}
 
       {/* GOOGLE SIGN-IN MODAL */}
       {showLoginModal && (
