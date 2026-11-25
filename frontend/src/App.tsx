@@ -143,9 +143,41 @@ function KgpLogo() {
 // Each place card shows its own photo from public/places/<slug>.jpg
 // (e.g. "Main Building" -> /places/main-building.jpg). If a file is missing,
 // the campus background underneath shows through.
+function placeSlug(name: string): string {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'place'
+}
+
 function placePhotoUrl(name: string): string {
-  const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-  return `/places/${slug || 'place'}.jpg`
+  return `/places/${placeSlug(name)}.jpg`
+}
+
+const PLACE_PHOTOS_KEY = 'queuesense_place_photos'
+
+// Shrink a photo picked from the admin's PC so it stays small enough to keep.
+function resizeImageFile(file: File, maxSide = 1280, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * scale)
+      canvas.height = Math.round(img.height * scale)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        URL.revokeObjectURL(url)
+        return reject(new Error('Canvas unavailable'))
+      }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      URL.revokeObjectURL(url)
+      resolve(canvas.toDataURL('image/jpeg', quality))
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('Could not read that image'))
+    }
+    img.src = url
+  })
 }
 
 type SectionView = 'explorer' | 'wayfinding' | 'analytics' | 'settings'
@@ -199,7 +231,48 @@ export default function App() {
   const [loginError, setLoginError] = useState<string>('')
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
   const accountMenuRef = useRef<HTMLDivElement | null>(null)
-  const [settingsTab, setSettingsTab] = useState<'google' | 'gates'>('google')
+  const [settingsTab, setSettingsTab] = useState<'google' | 'gates' | 'photos'>('google')
+  const [placePhotos, setPlacePhotos] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(PLACE_PHOTOS_KEY) ?? '{}')
+    } catch {
+      return {}
+    }
+  })
+
+  const placePhotoCss = (name: string) => {
+    const custom = placePhotos[placeSlug(name)]
+    return `url("${custom ?? placePhotoUrl(name)}")`
+  }
+
+  async function changePlacePhoto(name: string, file: File | undefined) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      showToast('Please choose an image file')
+      return
+    }
+    try {
+      const dataUrl = await resizeImageFile(file)
+      const next = { ...placePhotos, [placeSlug(name)]: dataUrl }
+      window.localStorage.setItem(PLACE_PHOTOS_KEY, JSON.stringify(next))
+      setPlacePhotos(next)
+      showToast(`${name} photo updated`)
+    } catch {
+      showToast('Could not save that photo. Try a smaller image.')
+    }
+  }
+
+  function resetPlacePhoto(name: string) {
+    const next = { ...placePhotos }
+    delete next[placeSlug(name)]
+    try {
+      window.localStorage.setItem(PLACE_PHOTOS_KEY, JSON.stringify(next))
+    } catch {
+      /* ignore */
+    }
+    setPlacePhotos(next)
+    showToast(`${name} photo reset`)
+  }
 
   // Per-camera video hiding when Admin is logged in
   const [hiddenVideoIds, setHiddenVideoIds] = useState<Set<string>>(new Set())
@@ -916,7 +989,7 @@ async function handleGoogleLogin(credential: string) {
         </div>
       )}
       {/* TOP COMMAND HEADER */}
-      <header className="relative z-30 flex h-16 shrink-0 items-center justify-between bg-white/70 px-6 backdrop-blur-xl">
+      <header className="relative z-30 flex h-16 shrink-0 items-center justify-between bg-transparent px-6">
         <div className="brand-area flex items-center gap-6">
           <div className="flex items-center gap-3">
             <div className="kgp-logo-wrap flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-white p-0.5 shadow-md shadow-blue-950/10">
@@ -973,26 +1046,21 @@ async function handleGoogleLogin(credential: string) {
 
         {/* RIGHT CONTROLS */}
         <div className="header-actions flex items-center gap-2.5">
-          <div
-            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 font-mono text-[11px] font-bold ${
-              connected
-                ? 'border-emerald-200 bg-emerald-50/70 text-emerald-800'
-                : 'border-rose-200 bg-rose-50 text-rose-800'
-            }`}
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${
-                connected ? 'animate-pulse bg-emerald-500' : 'bg-rose-500'
+          {(!connected || lastSync) && (
+            <div
+              className={`clock-pill px-2 font-mono text-[12px] font-bold ${
+                connected ? 'text-slate-700' : 'text-rose-700'
               }`}
-            />
-            {connected
-              ? lastSync?.toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                })
-              : 'OFFLINE'}
-          </div>
+            >
+              {connected
+                ? lastSync?.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })
+                : 'OFFLINE'}
+            </div>
+          )}
 
           <div className="relative" ref={accountMenuRef}>
             <button
@@ -1122,7 +1190,7 @@ async function handleGoogleLogin(credential: string) {
                         <button
                           key={folder.name}
                           onClick={() => setActivePlaceName(folder.name)}
-                          style={{ '--place-photo': `url("${placePhotoUrl(folder.name)}")` } as React.CSSProperties}
+                          style={{ '--place-photo': placePhotoCss(folder.name) } as React.CSSProperties}
                           className="place-card group relative flex flex-col justify-between overflow-hidden rounded-3xl border border-slate-200/90 bg-white p-5 text-left shadow-xs transition-all hover:-translate-y-0.5 hover:border-blue-400 hover:shadow-md"
                         >
                           <div>
@@ -1383,6 +1451,7 @@ async function handleGoogleLogin(credential: string) {
                         return (
                           <article
                             key={cam.id}
+                            style={{ '--place-photo': placePhotoCss(currentPlaceFolder.name) } as React.CSSProperties}
                             className={`gate-card flex flex-col justify-between overflow-hidden rounded-3xl border shadow-xs transition ${
                               cam.status === 'Offline'
                                 ? 'gate-card-offline border-slate-950 bg-slate-950'
@@ -1446,7 +1515,7 @@ async function handleGoogleLogin(credential: string) {
                             </div>
 
                             {showVideo ? (
-                              <div className="relative h-48 w-full bg-slate-950">
+                              <div className={`relative h-48 w-full ${cam.previewUrl ? 'bg-slate-950' : 'bg-slate-950/45'}`}>
                                 {cam.previewUrl ? (
                                   <img
                                     src={cam.previewUrl}
@@ -1454,7 +1523,7 @@ async function handleGoogleLogin(credential: string) {
                                     className="h-full w-full object-contain"
                                   />
                                 ) : (
-                                  <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-400">
+                                  <div className="flex h-full items-center justify-center text-xs font-semibold text-white">
                                     {cam.status === 'Online'
                                       ? 'Receiving live video footage...'
                                       : 'Sensor offline'}
@@ -2210,7 +2279,7 @@ async function handleGoogleLogin(credential: string) {
                   <ArrowLeft size={14} /> Back to Home
                 </button>
                 <div className="inline-flex rounded-xl border border-white/60 bg-white/50 p-1 backdrop-blur">
-                  {([['google', 'Google Accounts'], ['gates', 'Gates']] as const).map(([key, label]) => (
+                  {([['google', 'Google Accounts'], ['gates', 'Gates'], ['photos', 'Place Photos']] as const).map(([key, label]) => (
                     <button
                       key={key}
                       onClick={() => setSettingsTab(key)}
@@ -2394,6 +2463,59 @@ async function handleGoogleLogin(credential: string) {
                 </div>
               </div>
             </div>
+              )}
+
+              {settingsTab === 'photos' && (
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className="max-w-3xl space-y-3">
+                    <p className="rounded-2xl bg-white/70 px-4 py-3 text-xs font-medium text-slate-600 backdrop-blur">
+                      Pick a photo from this computer for each place. It also appears on that place&apos;s gate cards.
+                      Photos are saved in this browser.
+                    </p>
+                    {placeFolders.length === 0 && (
+                      <p className="rounded-2xl bg-white/70 px-4 py-6 text-center text-xs text-slate-500 backdrop-blur">
+                        No places yet. Add a place and gate first.
+                      </p>
+                    )}
+                    {placeFolders.map((folder) => (
+                      <div
+                        key={folder.name}
+                        className="flex items-center gap-4 rounded-2xl border border-white/60 bg-white/80 p-3 shadow-xs backdrop-blur"
+                      >
+                        <div
+                          className="h-20 w-32 shrink-0 rounded-xl bg-slate-200 bg-cover bg-center"
+                          style={{ backgroundImage: placePhotoCss(folder.name) }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-extrabold text-slate-900">{folder.name}</p>
+                          <p className="text-[11px] text-slate-500">
+                            {placePhotos[placeSlug(folder.name)] ? 'Custom photo' : 'Default photo'}
+                          </p>
+                        </div>
+                        <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-blue-700">
+                          <Camera size={13} /> Change photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              void changePlacePhoto(folder.name, e.target.files?.[0])
+                              e.target.value = ''
+                            }}
+                          />
+                        </label>
+                        {placePhotos[placeSlug(folder.name)] && (
+                          <button
+                            onClick={() => resetPlacePhoto(folder.name)}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}

@@ -82,7 +82,7 @@ select:focus-visible {
 
 .place-card {
   background-image:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.5) 30%, rgba(255, 255, 255, 0.6) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.56) 30%, rgba(255, 255, 255, 0.64) 100%),
     var(--place-photo, none),
     url("https://upload.wikimedia.org/wikipedia/commons/1/1a/Main_Building_-_Indian_Institute_of_Technology_-_Kharagpur_-_West_Midnapore_2013-01-26_3688.JPG");
   background-position: center;
@@ -90,7 +90,22 @@ select:focus-visible {
   min-height: 15.5rem;
 }
 
+.gate-card {
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.74) 100%),
+    var(--place-photo, none);
+  background-position: center;
+  background-size: cover;
+}
+
+.gate-card .bg-gradient-to-b {
+  background-image: none;
+}
+
 .gate-card-offline {
+  background-image:
+    linear-gradient(180deg, rgba(2, 6, 23, 0.55) 0%, rgba(2, 6, 23, 0.78) 100%),
+    var(--place-photo, none);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
@@ -131,7 +146,7 @@ select:focus-visible {
   .queuesense-app > header .kgp-logo-wrap { display: flex; height: 2.5rem; width: 2.5rem; }
   .queuesense-app > header .brand-area > div:not(:first-of-type) { display: none; }
   .queuesense-app > header .header-actions { gap: 0.5rem; flex-shrink: 0; }
-  .queuesense-app > header .header-actions > div:first-child { padding: 0.35rem 0.55rem; font-size: 0.65rem; }
+  .queuesense-app > header .clock-pill { padding: 0 0.25rem; font-size: 0.7rem; }
 
   .queuesense-app > div.flex.flex-1 {
     display: flex;
