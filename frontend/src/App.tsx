@@ -102,7 +102,25 @@ const IMMUTABLE_ADMIN_EMAIL = 'queuesense07@gmail.com'
 const IIT_KGP_LOGO_URL = '/kgp-logo.png'
 
 const GOOGLE_REMEMBER_KEY = 'queuesense_google_remembered'
-const APP_BUILD = 'v7 · 25 Nov 2026'
+const APP_BUILD = 'v8 · 26 Nov 2026'
+
+// Google's sign-in library must be initialised once. Calling initialize()
+// several times (each with its own callback) leaves it unsure which callback
+// to use, so there is a single initialise and a single handler that the
+// component keeps up to date.
+let googleCredentialHandler: (credential: string) => void = () => {}
+let googleInitializedFor = ''
+
+function initGoogleOnce(clientId: string) {
+  if (googleInitializedFor === clientId) return
+  window.google.accounts.id.initialize({
+    client_id: clientId,
+    auto_select: true,
+    cancel_on_tap_outside: false,
+    callback: (response: { credential: string }) => googleCredentialHandler(response.credential),
+  })
+  googleInitializedFor = clientId
+}
 
 function loadGoogleScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -669,20 +687,7 @@ export default function App() {
       if (window.localStorage.getItem(triedKey)) return
       window.localStorage.setItem(triedKey, '1')
       await loadGoogleScript()
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        auto_select: true,
-        cancel_on_tap_outside: false,
-        callback: (response: { credential: string }) => {
-          const claims = decodeJwt(response.credential)
-          const gEmail = typeof claims.email === 'string' ? claims.email : ''
-          const picture = typeof claims.picture === 'string' ? claims.picture : ''
-          if (gEmail.toLowerCase() !== email.toLowerCase()) return
-          const saved = { email, picture }
-          window.localStorage.setItem(PROFILE_KEY, JSON.stringify(saved))
-          setProfile(saved)
-        },
-      })
+      initGoogleOnce(clientId)
       window.google.accounts.id.prompt()
     } catch {
       /* keep the initial-letter avatar */
@@ -704,25 +709,61 @@ export default function App() {
       const clientId = window.__QUEUE_SENSE_CONFIG__?.googleClientId || import.meta.env.VITE_GOOGLE_CLIENT_ID
       if (!clientId) return
       await loadGoogleScript()
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        auto_select: true,
-        cancel_on_tap_outside: false,
-        callback: (response: { credential: string }) => void handleGoogleLogin(response.credential),
-      })
+      initGoogleOnce(clientId)
       window.google.accounts.id.prompt()
     } catch {
       /* stay signed out */
     }
   }
 
+// Whatever Google hands back goes here: a normal sign-in when signed out, or
+// just the profile picture when this device is already signed in.
+  useEffect(() => {
+    googleCredentialHandler = (credential: string) => {
+      if (!isAuthenticated) {
+        void handleGoogleLogin(credential)
+        return
+      }
+      const claims = decodeJwt(credential)
+      const gEmail = typeof claims.email === 'string' ? claims.email : ''
+      const picture = typeof claims.picture === 'string' ? claims.picture : ''
+      if (!gEmail || gEmail.toLowerCase() !== userEmail.toLowerCase()) return
+      const saved = { email: userEmail, picture }
+      try {
+        window.localStorage.setItem(PROFILE_KEY, JSON.stringify(saved))
+      } catch {
+        /* ignore */
+      }
+      setProfile(saved)
+    }
+  })
+
 async function handleGoogleLogin(credential: string) {
   setLoginError('')
   setIsSigningIn(true)
 
   try {
-    // Step 1: Authenticate with Google
-    const user = await loginWithGoogle(credential)
+    // Step 1: Authenticate with Google. The server sometimes refuses a token
+    // that was only just issued (its clock can be a moment behind Google's),
+    // so a "could not be verified" answer is retried a couple of times.
+    let user: Awaited<ReturnType<typeof loginWithGoogle>> | undefined
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        user = await loginWithGoogle(credential)
+        break
+      } catch (err) {
+        const message = err instanceof Error ? err.message : ''
+        const claims = decodeJwt(credential)
+        console.warn('Google sign-in attempt rejected', {
+          attempt,
+          message,
+          tokenAgeSeconds: typeof claims.iat === 'number' ? Math.round(Date.now() / 1000 - claims.iat) : null,
+        })
+        if (attempt >= 3 || !/verif|too early|try again/i.test(message)) throw err
+        await new Promise((resolve) => window.setTimeout(resolve, attempt * 1500))
+      }
+    }
+    if (!user) throw new Error('Google sign-in could not be completed.')
 
     // Step 2: Complete login immediately
     setIsAdmin(user.role === 'admin')
@@ -763,10 +804,11 @@ async function handleGoogleLogin(credential: string) {
   } catch (error) {
     console.error('Google authentication failed:', error)
 
+    const message = error instanceof Error ? error.message : ''
     setLoginError(
-      error instanceof Error
-        ? error.message
-        : 'Google authentication failed. Please try again.'
+      /verif/i.test(message)
+        ? 'Google sign-in could not be verified. Please wait a few seconds and press "Continue with Google" again.'
+        : message || 'Google authentication failed. Please try again.',
     )
 
   } finally {
@@ -854,13 +896,7 @@ async function handleGoogleLogin(credential: string) {
       if (!googleButtonRef.current || !window.google) return
       window.clearTimeout(fallbackTimer)
       googleButtonRef.current.replaceChildren()
-      window.google?.accounts.id.initialize({
-        client_id: clientId,
-        callback: (response: { credential: string }) => void handleGoogleLogin(response.credential),
-        // Google only auto-selects an account after the person has already
-        // approved it; no account chooser is forced into this screen.
-        auto_select: true,
-      })
+      initGoogleOnce(clientId)
       window.google.accounts.id.renderButton(googleButtonRef.current, { theme: 'outline', size: 'large', width: 320, text: 'continue_with' })
       setShowGoogleFallback(false)
     }

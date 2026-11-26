@@ -157,6 +157,8 @@ export function getHealth() {
 }
 
 export async function loginWithGoogle(credential: string): Promise<{ email: string; role: UserRole }> {
+  // A sign-in must not carry a leftover token from the previous session.
+  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   const response = await apiRequest<{ access_token: string; user: { email: string; role: UserRole } }>("/api/auth/google", {
     method: "POST",
     body: JSON.stringify({ credential }),
