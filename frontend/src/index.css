@@ -125,7 +125,7 @@ select:focus-visible {
 }
 
 .photo-wash.gate-off {
-  background: linear-gradient(180deg, rgba(2, 6, 23, 0.55) 0%, rgba(2, 6, 23, 0.78) 100%);
+  background: linear-gradient(180deg, rgba(203, 213, 225, 0.74) 0%, rgba(148, 163, 184, 0.84) 100%);
 }
 
 .place-card > :not(.photo-layer):not(.photo-wash),
@@ -140,19 +140,54 @@ select:focus-visible {
 }
 
 .gate-card-offline {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.18);
 }
 
 .gate-card-offline :is(.text-slate-900, .text-slate-800, .text-slate-700, .text-slate-600, .text-slate-500, .text-slate-400) {
-  color: rgba(255, 255, 255, 0.78);
+  color: #334155;
 }
 
 .gate-card-offline :is(.bg-white, .bg-slate-50, .bg-slate-100, .bg-blue-50) {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: rgba(241, 245, 249, 0.86);
 }
 
 .gate-card-offline :is(.border-slate-100, .border-slate-200, .border-blue-100) {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(100, 116, 139, 0.24);
+}
+
+/* Familiar rule-of-thirds framing for the shared-photo crop editor. */
+.crop-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.crop-grid span {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 0 1px rgba(15, 23, 42, 0.55);
+}
+
+.crop-grid span:nth-child(1), .crop-grid span:nth-child(2) { top: 0; bottom: 0; width: 1px; }
+.crop-grid span:nth-child(1) { left: 33.333%; }
+.crop-grid span:nth-child(2) { left: 66.667%; }
+.crop-grid span:nth-child(3), .crop-grid span:nth-child(4) { left: 0; right: 0; height: 1px; }
+.crop-grid span:nth-child(3) { top: 33.333%; }
+.crop-grid span:nth-child(4) { top: 66.667%; }
+
+.crop-center {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  box-shadow: 0 0 2px rgba(15, 23, 42, 0.7);
+  pointer-events: none;
 }
 
 /* Phones use a focused, fixed-height queue board. Navigation stays available

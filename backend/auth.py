@@ -7,6 +7,7 @@ import os
 import re
 import secrets
 import time
+import sqlite3
 from pathlib import Path
 
 from fastapi import Header, HTTPException, status
@@ -158,7 +159,13 @@ def authenticate_google(credential: str):
     user = get_user_by_google_id(google_id) or get_user_by_email(email)
     is_immutable_admin = email == IMMUTABLE_ADMIN_EMAIL
     if user is None:
-        user = create_user(email, "", "admin" if email == owner_email or is_immutable_admin else "viewer", google_id)
+        # Google may call back twice in quick succession (or the same person
+        # may sign in from two tabs). The email is unique, so resolve that
+        # harmless provisioning race instead of rejecting the sign-in.
+        try:
+            user = create_user(email, "", "admin" if email == owner_email or is_immutable_admin else "viewer", google_id)
+        except sqlite3.IntegrityError:
+            user = get_user_by_google_id(google_id) or get_user_by_email(email)
     else:
         if not user.get("google_id"):
             set_user_google_id(user["id"], google_id)

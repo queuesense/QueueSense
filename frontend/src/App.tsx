@@ -53,13 +53,17 @@ import {
   getAdminSession,
   clearAdminToken,
   updateCameraRoi,
+  clearUserAccess,
   getUsers,
+  getSharedPhotos,
+  updateSharedPhotos,
   updateUserRole,
   type QueueSenseCamera,
   type QueueSenseSummary,
   type PhoneCameraDetection,
   type CameraDetectionHistoryItem,
   type QueueSenseUser,
+  type SharedPhotoEntry,
   type UserRole,
 } from './lib/api'
 
@@ -384,13 +388,17 @@ function PhotoEditor({
           className="relative mt-4 flex aspect-[16/9] cursor-grab flex-col justify-end overflow-hidden rounded-2xl bg-slate-200 p-4 ring-1 ring-slate-200 active:cursor-grabbing"
         >
           <PhotoLayers variant="place" />
+          <div className="crop-grid" aria-hidden="true">
+            <span /><span /><span /><span />
+          </div>
+          <span className="crop-center" aria-hidden="true" />
           <div className="relative z-[2]">
             <p className="text-base font-extrabold text-slate-900">{title}</p>
             <p className="text-xs font-bold text-slate-700">Live preview</p>
           </div>
         </div>
         <p className="mt-1.5 text-center text-[11px] font-medium text-slate-500">
-          Drag the photo to move it. Scroll or use the slider to zoom.
+          Drag to position the image inside the 3×3 crop grid. Scroll or use the slider to zoom.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -451,8 +459,8 @@ function PhotoEditor({
   )
 }
 
-// Shrink a photo picked from the admin's PC so it stays small enough to keep.
-function resizeImageFile(file: File, maxSide = 1280, quality = 0.82): Promise<string> {
+// Keep shared photos compact enough to store and send safely to every signed-in user.
+function resizeImageFile(file: File, maxSide = 1024, quality = 0.78): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
     const img = new Image()
@@ -529,6 +537,7 @@ export default function App() {
   const [loginError, setLoginError] = useState<string>('')
   const googleButtonRef = useRef<HTMLDivElement | null>(null)
   const accountMenuRef = useRef<HTMLDivElement | null>(null)
+  const signInInFlightRef = useRef(false)
   const [settingsTab, setSettingsTab] = useState<'google' | 'gates' | 'photos'>('google')
   const [photos, setPhotos] = useState<Record<string, PhotoEntry>>(() => {
     try {
@@ -569,19 +578,35 @@ export default function App() {
     return [placeSrc, placePhotoUrl(placeName), WIKI_BG].filter(Boolean) as string[]
   }
 
-  function savePhoto(key: string, entry: PhotoEntry | null) {
+  async function savePhoto(key: string, entry: PhotoEntry | null) {
     const next = { ...photos }
     if (entry) next[key] = entry
     else delete next[key]
     try {
-      window.localStorage.setItem(PLACE_PHOTOS_KEY, JSON.stringify(next))
+      await updateSharedPhotos(next as Record<string, SharedPhotoEntry>)
     } catch {
-      showToast('Photo is too large to save. Try a smaller image.')
+      showToast('Could not save the shared photo. Try a smaller image or sign in again.')
       return
     }
+    // Keep an offline cache only. The server is the shared source of truth.
+    try { window.localStorage.setItem(PLACE_PHOTOS_KEY, JSON.stringify(next)) } catch { /* cache is optional */ }
     setPhotos(next)
     setPhotoEditor(null)
-    showToast(entry ? 'Photo saved' : 'Photo reset')
+    showToast(entry ? 'Shared photo saved for all users' : 'Shared photo reset for all users')
+  }
+
+  async function loadSharedPhotos() {
+    try {
+      const { items } = await getSharedPhotos()
+      const normalized: Record<string, PhotoEntry> = {}
+      for (const [key, value] of Object.entries(items)) {
+        normalized[key] = { ...DEFAULT_PHOTO, ...value }
+      }
+      setPhotos(normalized)
+      try { window.localStorage.setItem(PLACE_PHOTOS_KEY, JSON.stringify(normalized)) } catch { /* cache is optional */ }
+    } catch {
+      // A cached photo is still better than a visual flash while a connection is unavailable.
+    }
   }
 
   // Per-camera video hiding when Admin is logged in
@@ -739,6 +764,8 @@ export default function App() {
   })
 
 async function handleGoogleLogin(credential: string) {
+  if (signInInFlightRef.current) return
+  signInInFlightRef.current = true
   setLoginError('')
   setIsSigningIn(true)
 
@@ -787,6 +814,7 @@ async function handleGoogleLogin(credential: string) {
     }
 
     showToast('Signed in successfully')
+    await loadSharedPhotos()
 
     // Step 3: Load admin users separately
     if (user.role === 'admin') {
@@ -812,6 +840,7 @@ async function handleGoogleLogin(credential: string) {
     )
 
   } finally {
+    signInInFlightRef.current = false
     setIsSigningIn(false)
   }
 }
@@ -848,6 +877,7 @@ async function handleGoogleLogin(credential: string) {
         setIsAdmin(session.role === 'admin')
         setUserRole(session.role)
         setUserEmail(session.email)
+        await loadSharedPhotos()
         if (session.role === 'admin') setUsers((await getUsers()).items)
       })
       .catch(() => {
@@ -855,6 +885,18 @@ async function handleGoogleLogin(credential: string) {
         void silentGoogleSignIn()
       })
   }, [])
+
+  async function handleClearUserAccess() {
+    if (!window.confirm('Clear all user access? Your administrator account is kept, and everyone else will need to sign in again as a viewer.')) return
+    setUserMessage('')
+    try {
+      const result = await clearUserAccess()
+      setUsers((await getUsers()).items)
+      setUserMessage(`${result.removed} account${result.removed === 1 ? '' : 's'} cleared. New sign-ins start as viewers.`)
+    } catch (error) {
+      setUserMessage(error instanceof Error ? error.message : 'Could not clear user access.')
+    }
+  }
 
   // Reflect an administrator's role change for a currently online account.
   // Backend authorization is immediate; this keeps the visible UI in sync too.
@@ -941,7 +983,7 @@ async function handleGoogleLogin(credential: string) {
 
   // Instant Snapshot Download (.jpg)
   function downloadInstantSnap(camId: string, previewUrl: string | null) {
-    if (!isAdmin || !previewUrl) return
+    if (!canOperate || !previewUrl) return
     const link = document.createElement('a')
     link.href = previewUrl
     link.download = `${camId}-snap-${Date.now()}.jpg`
@@ -953,7 +995,7 @@ async function handleGoogleLogin(credential: string) {
 
   // Instant Client-Side Video Clip Recorder (.webm)
   function toggleClipRecord(camId: string, initialPreview: string | null) {
-    if (!isAdmin) return
+    if (!canOperate) return
 
     if (recordingCamId === camId && recorderRef.current) {
       recorderRef.current.stop()
@@ -1491,12 +1533,12 @@ async function handleGoogleLogin(credential: string) {
                       <Smartphone size={14} /> Pair sensor
                     </button>
                   )}
-                  {isAdmin && (
+                  {canOperate && (
                     <button
-                      onClick={() => { navigateTo('settings'); setShowAccountMenu(false) }}
+                      onClick={() => { setSettingsTab(isAdmin ? 'google' : 'photos'); navigateTo('settings'); setShowAccountMenu(false) }}
                       className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-100"
                     >
-                      <Settings size={14} /> Admin setting
+                      <Settings size={14} /> {isAdmin ? 'Admin settings' : 'Manage photos'}
                     </button>
                   )}
                   <button
@@ -1538,7 +1580,7 @@ async function handleGoogleLogin(credential: string) {
                       </p>
                     </div>
 
-                    {isAdmin && (
+                        {isAdmin && (
                       <button
                         onClick={() => navigateTo('settings')}
                         className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50"
@@ -1696,7 +1738,7 @@ async function handleGoogleLogin(credential: string) {
 
                     {/* SWITCH BETWEEN CARD GRID AND 2D ARCHITECTURAL FLOORPLAN */}
                     <div className="flex items-center gap-2">
-                      {isAdmin && (
+                      {canOperate && (
                         <button
                           onClick={() =>
                             setPhotoEditor({
@@ -1870,7 +1912,7 @@ async function handleGoogleLogin(credential: string) {
                             style={photoStyleFor(`gate:${cam.id}`, currentPlaceFolder.name)}
                             className={`gate-card flex flex-col justify-between overflow-hidden rounded-3xl border shadow-xs transition ${
                               cam.status === 'Offline'
-                                ? 'gate-card-offline border-slate-950 bg-slate-950'
+                                ? 'gate-card-offline border-slate-300 bg-slate-100'
                                 : isBestInPlace
                                 ? 'border-emerald-400 ring-2 ring-emerald-100'
                                 : 'border-emerald-300 bg-white'
@@ -1902,7 +1944,7 @@ async function handleGoogleLogin(credential: string) {
                               </div>
 
                               <div className="flex items-center gap-1.5">
-                              {isAdmin && (
+                              {canOperate && (
                                 <button
                                   title="Edit photo"
                                   aria-label="Edit photo"
@@ -1919,7 +1961,7 @@ async function handleGoogleLogin(credential: string) {
                                   <Camera size={13} /> Photo
                                 </button>
                               )}
-                              {isAdmin ? (
+                              {canOperate ? (
                                 <button
                                   onClick={() =>
                                     toggleCameraVideoVisibility(cam.id)
@@ -2165,7 +2207,7 @@ async function handleGoogleLogin(credential: string) {
                     </div>
 
                     {/* ADMIN-ONLY VIDEO, ROI ZONE & CAPTURE CONTROLS */}
-                    {isAdmin && (
+                    {canOperate && (
                       <div className="flex flex-wrap items-center gap-2">
                         {!hiddenVideoIds.has(inspectedCamera.id) && (
                           <>
@@ -2259,7 +2301,7 @@ async function handleGoogleLogin(credential: string) {
                   <div className="grid flex-1 grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[1.35fr_1fr]">
                     {/* LEFT: VIDEO FOOTAGE WITH INTERACTIVE ROI OVERLAY OR PURE TELEMETRY */}
                     <div className="flex flex-col justify-between overflow-hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-xs">
-                      {isAdmin && !hiddenVideoIds.has(inspectedCamera.id) ? (
+                      {canOperate && !hiddenVideoIds.has(inspectedCamera.id) ? (
                         <div
                           ref={videoStageRef}
                           onMouseDown={(e) => {
@@ -2701,7 +2743,7 @@ async function handleGoogleLogin(credential: string) {
           {/* =========================================================
               VIEW 4: ADMIN SETTINGS & STRONG PASSWORD CHANGER
              ========================================================= */}
-          {section === 'settings' && isAdmin && (
+          {section === 'settings' && canOperate && (
             <div className="flex h-full flex-col gap-4 overflow-hidden">
               <div className="flex shrink-0 flex-wrap items-center gap-3">
                 <button
@@ -2715,10 +2757,10 @@ async function handleGoogleLogin(credential: string) {
                   <ArrowLeft size={14} /> Back to Home
                 </button>
                 <div className="inline-flex rounded-xl border border-white/60 bg-white/50 p-1 backdrop-blur">
-                  {([['google', 'Google Accounts'], ['gates', 'Gates'], ['photos', 'Place Photos']] as const).map(([key, label]) => (
+                  {(isAdmin ? [['google', 'Google Accounts'], ['gates', 'Gates'], ['photos', 'Place Photos']] : [['photos', 'Place Photos']] as const).map(([key, label]) => (
                     <button
                       key={key}
-                      onClick={() => setSettingsTab(key)}
+                      onClick={() => setSettingsTab(key as 'google' | 'gates' | 'photos')}
                       className={`rounded-lg px-4 py-1.5 text-xs font-extrabold transition ${
                         settingsTab === key ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                       }`}
@@ -2740,6 +2782,12 @@ async function handleGoogleLogin(credential: string) {
                     </h2>
                   </div>
                   <p className="mt-0.5 text-xs text-slate-500">Accounts appear here after their first Google sign-in. New accounts are viewers by default.</p>
+                  <button
+                    onClick={() => void handleClearUserAccess()}
+                    className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                  >
+                    Clear user access and start over
+                  </button>
                   {userMessage && <p className="mt-2 text-xs font-bold text-slate-600">{userMessage}</p>}
                   <div className="relative mt-3">
                     <input
@@ -2906,7 +2954,7 @@ async function handleGoogleLogin(credential: string) {
                   <div className="max-w-3xl space-y-3">
                     <p className="rounded-2xl bg-white/70 px-4 py-3 text-xs font-medium text-slate-600 backdrop-blur">
                       Choose a photo from this computer and adjust zoom, position and overlay for each place. A gate uses its
-                      place&apos;s photo unless you give it its own. Changes are saved in this browser.
+                      place&apos;s photo unless you give it its own. Changes are shared with every signed-in user. Use the 3×3 crop grid to frame each image.
                     </p>
                     {placeFolders.length === 0 && (
                       <p className="rounded-2xl bg-white/70 px-4 py-6 text-center text-xs text-slate-500 backdrop-blur">
@@ -2995,14 +3043,14 @@ async function handleGoogleLogin(credential: string) {
       </div>
 
       {/* PHOTO EDITOR (admin) */}
-      {photoEditor && isAdmin && (
+      {photoEditor && canOperate && (
         <PhotoEditor
           key={photoEditor.key}
           title={photoEditor.title}
           subtitle={photoEditor.subtitle}
           initial={photos[photoEditor.key]}
           fallbackUrls={fallbackUrlsFor(photoEditor.key, photoEditor.placeName)}
-          onSave={(entry) => savePhoto(photoEditor.key, entry)}
+          onSave={(entry) => void savePhoto(photoEditor.key, entry)}
           onClose={() => setPhotoEditor(null)}
         />
       )}

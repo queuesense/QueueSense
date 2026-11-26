@@ -111,6 +111,14 @@ export interface QueueSenseUser {
   created_at: string;
 }
 
+export interface SharedPhotoEntry {
+  src?: string;
+  zoom: number;
+  x: number;
+  y: number;
+  wash: number;
+}
+
 async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
@@ -179,6 +187,23 @@ export function updateUserRole(userId: number, role: UserRole) {
   return apiRequest<{ message: string }>(`/api/users/${userId}/role`, {
     method: "PATCH",
     body: JSON.stringify({ role }),
+  });
+}
+
+export function clearUserAccess() {
+  return apiRequest<{ message: string; removed: number }>("/api/users", {
+    method: "DELETE",
+  });
+}
+
+export function getSharedPhotos() {
+  return apiGet<{ items: Record<string, SharedPhotoEntry> }>("/api/photos");
+}
+
+export function updateSharedPhotos(items: Record<string, SharedPhotoEntry>) {
+  return apiRequest<{ items: Record<string, SharedPhotoEntry> }>("/api/photos", {
+    method: "PUT",
+    body: JSON.stringify({ items }),
   });
 }
 

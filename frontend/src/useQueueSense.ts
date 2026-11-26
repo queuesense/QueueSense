@@ -36,7 +36,7 @@ export function useQueueSense() {
           getActivity(),
         ]);
 
-      if (healthData.status !== "ok") {
+      if (healthData.status !== "healthy" && healthData.status !== "ok") {
         throw new Error("Backend health check did not return OK.");
       }
 

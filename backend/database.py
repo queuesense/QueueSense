@@ -63,6 +63,15 @@ def initialize_database():
             )
         """)
         connection.execute("""
+            CREATE TABLE IF NOT EXISTS camera_rois (
+                camera_id TEXT PRIMARY KEY,
+                x1 REAL NOT NULL CHECK (x1 >= 0 AND x1 <= 1),
+                y1 REAL NOT NULL CHECK (y1 >= 0 AND y1 <= 1),
+                x2 REAL NOT NULL CHECK (x2 >= 0 AND x2 <= 1),
+                y2 REAL NOT NULL CHECK (y2 >= 0 AND y2 <= 1)
+            )
+        """)
+        connection.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -94,6 +103,24 @@ def set_admin_password_hash(password_hash: str):
             "INSERT INTO app_settings (key, value) VALUES ('admin_password_hash', ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (password_hash,),
+        )
+        connection.commit()
+
+
+def get_app_setting(key: str):
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else None
+
+
+def set_app_setting(key: str, value: str):
+    with get_connection() as connection:
+        connection.execute(
+            "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
         )
         connection.commit()
 
@@ -156,6 +183,46 @@ def set_user_google_id(user_id: int, google_id: str):
 def update_user_role(user_id: int, role: str):
     with get_connection() as connection:
         connection.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+        connection.commit()
+
+
+def clear_user_access(keep_emails: list[str]) -> int:
+    """Remove provisioned accounts except the administrator(s) carrying out a reset."""
+    normalized = sorted({email.strip().lower() for email in keep_emails if email.strip()})
+    if not normalized:
+        raise ValueError("At least one administrator must be retained.")
+    placeholders = ", ".join("?" for _ in normalized)
+    with get_connection() as connection:
+        cursor = connection.execute(
+            f"DELETE FROM users WHERE lower(email) NOT IN ({placeholders})", normalized
+        )
+        connection.commit()
+        return cursor.rowcount
+
+
+def get_camera_roi(camera_id: str):
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT x1, y1, x2, y2 FROM camera_rois WHERE camera_id = ?", (camera_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def save_camera_roi(camera_id: str, roi: dict[str, float] | None):
+    with get_connection() as connection:
+        if roi is None:
+            connection.execute("DELETE FROM camera_rois WHERE camera_id = ?", (camera_id,))
+        else:
+            connection.execute(
+                """
+                INSERT INTO camera_rois (camera_id, x1, y1, x2, y2)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(camera_id) DO UPDATE SET
+                    x1 = excluded.x1, y1 = excluded.y1,
+                    x2 = excluded.x2, y2 = excluded.y2
+                """,
+                (camera_id, roi["x1"], roi["y1"], roi["x2"], roi["y2"]),
+            )
         connection.commit()
 
 

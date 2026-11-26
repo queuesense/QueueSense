@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from ultralytics import YOLO
 
-from database import list_cameras, set_camera_offline, update_live_camera_detection
+from database import get_camera_roi, list_cameras, save_camera_roi, set_camera_offline, update_live_camera_detection
 from auth import require_operator
 
 cv2.setNumThreads(1)
@@ -363,6 +363,7 @@ async def update_camera_roi(payload: RoiUpdateRequest):
     cid = _sanitize_camera_id(payload.camera_id)
     if not payload.enabled:
         camera_rois.pop(cid, None)
+        await asyncio.to_thread(save_camera_roi, cid, None)
         return {"ok": True, "camera_id": cid, "roi": None}
 
     roi_box = {
@@ -372,6 +373,7 @@ async def update_camera_roi(payload: RoiUpdateRequest):
         "y2": round(max(payload.y1, payload.y2), 3),
     }
     camera_rois[cid] = roi_box
+    await asyncio.to_thread(save_camera_roi, cid, roi_box)
     return {"ok": True, "camera_id": cid, "roi": roi_box}
 
 
@@ -406,6 +408,13 @@ async def receive_frame(payload: FrameRequest):
     camera_id = _sanitize_camera_id(payload.camera_id)
     camera_name = payload.camera_name.strip() or f"Gate ({camera_id})"
     location = payload.location.strip() or "Main Entrance"
+
+    # ROI selections survive a service restart and are restored as soon as a
+    # sensor sends its first frame again.
+    if camera_id not in camera_rois:
+        saved_roi = await asyncio.to_thread(get_camera_roi, camera_id)
+        if saved_roi:
+            camera_rois[camera_id] = saved_roi
 
     try:
         image = decode_base64_frame(payload.image)
@@ -534,7 +543,7 @@ async def phone_camera_status():
             "database_error": item["database_error"],
             "last_error": item["last_error"],
             "preview_image": item.get("preview_image"),
-            "roi": camera_rois.get(cid),
+            "roi": camera_rois.get(cid) or await asyncio.to_thread(get_camera_roi, cid),
         })
 
     return {
