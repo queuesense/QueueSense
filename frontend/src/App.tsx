@@ -1735,6 +1735,19 @@ async function handleGoogleLogin(credential: string) {
                     <div className="flex items-center gap-2">
                       {canOperate && (
                         <button
+                          onClick={() => {
+                            setNewPlaceName(currentPlaceFolder.name)
+                            setNewGateName('')
+                            setSettingsTab('gates')
+                            navigateTo('settings')
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/50 bg-white/70 px-3 py-2 text-xs font-bold text-slate-800 shadow-2xs backdrop-blur hover:bg-white"
+                        >
+                          <Plus size={14} /> Add gate
+                        </button>
+                      )}
+                      {canOperate && (
+                        <button
                           onClick={() =>
                             setPhotoEditor({
                               key: placeSlug(currentPlaceFolder.name),
