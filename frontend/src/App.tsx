@@ -106,7 +106,6 @@ const IMMUTABLE_ADMIN_EMAIL = 'queuesense07@gmail.com'
 const IIT_KGP_LOGO_URL = '/kgp-logo.png'
 
 const GOOGLE_REMEMBER_KEY = 'queuesense_google_remembered'
-const APP_BUILD = 'v8 · 26 Nov 2026'
 
 // Google's sign-in library must be initialised once. Calling initialize()
 // several times (each with its own callback) leaves it unsure which callback
@@ -1548,9 +1547,6 @@ async function handleGoogleLogin(credential: string) {
                     <LogOut size={14} /> Sign out
                   </button>
                 </div>
-                <p className="mt-1 border-t border-slate-100 px-3 pt-2 pb-1 text-[10px] font-semibold text-slate-400">
-                  Build {APP_BUILD}
-                </p>
               </div>
             )}
           </div>
@@ -1592,7 +1588,7 @@ async function handleGoogleLogin(credential: string) {
                   </div>
 
                   {placeFolders.length === 0 ? (
-                    <div className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white/70 p-10 text-center">
+                    <div className="flex flex-1 flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300/50 bg-transparent p-10 text-center">
                       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
                         <Folder size={28} />
                       </div>
@@ -1622,7 +1618,6 @@ async function handleGoogleLogin(credential: string) {
                           >
                             <UserCheck size={14} /> Continue with Google
                           </button>
-                          <p className="mt-4 text-[10px] font-semibold text-slate-400">Build {APP_BUILD}</p>
                         </>
                       )}
                     </div>
